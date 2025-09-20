@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import ScreenshotUploader from '@/components/ScreenshotUploader'; 
+import ScreenshotUploader from '@/components/ScreenshotUploader';
 import ReactMarkdown from 'react-markdown';
 
 type MockDetails = {
@@ -63,32 +63,32 @@ export default function MockDetailPage() {
       fetchInitialData();
     }
   }, [id]);
-  // Add this function inside your MockDetailPage component
-const handleDelete = async (mistakeId: number) => {
-  // Ask for confirmation before deleting
-  if (!window.confirm("Are you sure you want to delete this mistake?")) {
-    return;
-  }
 
-  try {
-    const response = await fetch(`${API_URL}/api/mistakes/${mistakeId}`, {
-      method: 'DELETE',
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to delete mistake');
+  const handleDelete = async (mistakeId: number) => {
+    // Ask for confirmation before deleting
+    if (!window.confirm("Are you sure you want to delete this mistake?")) {
+      return;
     }
 
-    // Update the UI by removing the deleted mistake from the state
-    setMistakes(currentMistakes => 
-      currentMistakes.filter(m => m.id !== mistakeId)
-    );
-    alert('Mistake deleted successfully!');
-  } catch (error) {
-    console.error("Delete error:", error);
-    alert("Failed to delete the mistake.");
-  }
-};
+    try {
+      const response = await fetch(`${API_URL}/api/mistakes/${mistakeId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete mistake');
+      }
+
+      // Update the UI by removing the deleted mistake from the state
+      setMistakes(currentMistakes =>
+        currentMistakes.filter(m => m.id !== mistakeId)
+      );
+      alert('Mistake deleted successfully!');
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Failed to delete the mistake.");
+    }
+  };
 
   const handleAnalyze = async (mistakeId: number, analysisType: 'visual' | 'text') => {
     setAnalyzingId(mistakeId);
@@ -102,8 +102,8 @@ const handleDelete = async (mistakeId: number) => {
         throw new Error(errorData.error || 'Analysis failed');
       }
       const result = await response.json();
-      setMistakes(currentMistakes => 
-        currentMistakes.map(m => 
+      setMistakes(currentMistakes =>
+        currentMistakes.map(m =>
           m.id === mistakeId ? { ...m, analysis_text: result.analysis } : m
         )
       );
@@ -138,53 +138,57 @@ const handleDelete = async (mistakeId: number) => {
           <div className="space-y-6">
             {mistakes.length === 0 && <p className="text-gray-400">No mistakes uploaded yet.</p>}
             {mistakes.map((mistake) => {
-  const filename = mistake.image_path.split(/[\\/]/).pop();
-  const imageUrl = `${API_URL}/uploads/${filename}`;
-  console.log("Attempting to load image from:", imageUrl);
+              const filename = mistake.image_path.split(/[\\/]/).pop();
+              const imageUrl = `${API_URL}/api/uploads/${filename}`;
+              console.log("Image URL:", imageUrl);
+              console.log("API_URL:", API_URL);
 
-  return (
-    <div key={mistake.id} className="bg-gray-800 p-4 rounded-lg">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Image Column */}
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-sm font-semibold truncate">{filename}</p>
-            {/* New Delete Button */}
-            <button 
-              onClick={() => handleDelete(mistake.id)}
-              className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
-            >
-              Delete
-            </button>
-          </div>
-          <img 
-            src={imageUrl} 
-            alt={`Mistake screenshot ${mistake.id}`}
-            className="rounded-lg w-full" 
-          />
-        </div>
+              return (
+                <div key={mistake.id} className="bg-gray-800 p-4 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="flex justify-between items-center mb-2">
+                        <p className="text-sm font-semibold truncate">{filename}</p>
+                        <button
+                          onClick={() => handleDelete(mistake.id)}
+                          className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <img
+                        src={imageUrl}
+                        alt={`Mistake screenshot ${mistake.id}`}
+                        className="rounded-lg w-full"
+                        onError={(e) => {
+                          console.error("Image failed to load:", imageUrl);
+                          console.error("Error:", e);
+                        }}
+                        onLoad={() => console.log("Image loaded successfully:", imageUrl)}
+                      />
+                    </div>
 
-        {/* Analysis Column */}
-        <div>
-          {mistake.analysis_text ? (
-            <div className="prose prose-invert text-sm">
-              <ReactMarkdown>{mistake.analysis_text}</ReactMarkdown>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <button onClick={() => handleAnalyze(mistake.id, 'visual')} disabled={analyzingId === mistake.id} className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
-                {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Visual'}
-              </button>
-              <button onClick={() => handleAnalyze(mistake.id, 'text')} disabled={analyzingId === mistake.id} className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
-                {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Text'}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-})}
+                    {/* Analysis Column */}
+                    <div>
+                      {mistake.analysis_text ? (
+                        <div className="prose prose-invert text-sm">
+                          <ReactMarkdown>{mistake.analysis_text}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-4">
+                          <button onClick={() => handleAnalyze(mistake.id, 'visual')} disabled={analyzingId === mistake.id} className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
+                            {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Visual'}
+                          </button>
+                          <button onClick={() => handleAnalyze(mistake.id, 'text')} disabled={analyzingId === mistake.id} className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
+                            {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Text'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
