@@ -5,6 +5,7 @@ class Mistake(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     image_path = db.Column(db.String(255), nullable=False)
     analysis_text = db.Column(db.Text, nullable=True)
+    topic = db.Column(db.String(255), nullable=True)
     mock_id = db.Column(db.Integer, db.ForeignKey('mocks.id'), nullable=False)
 
     def __repr__(self):

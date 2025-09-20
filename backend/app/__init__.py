@@ -23,7 +23,9 @@ def create_app(config_class=Config):
 
     # Import and register blueprints
     from .api.mock_routes import api_blueprint
+    from .api.analytics_routes import analytics_blueprint
     app.register_blueprint(api_blueprint, url_prefix='/api')
+    app.register_blueprint(analytics_blueprint, url_prefix='/api')
 
     # Import models so Alembic can see them
     from .models import mock, mistake 
