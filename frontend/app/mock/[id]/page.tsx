@@ -34,6 +34,8 @@ type Mistake = {
   image_path: string;
   analysis_text: string | null;
   topic: string | null; // Added the topic field
+  section_name: string;
+  question_type: string;
 };
 
 // --- COMPONENT ---
@@ -165,55 +167,49 @@ export default function MockDetailPage() {
             </div>
         </div>
 
-        {/* Upload Form */}
-        <div className="mb-12">
-          <h2 className="text-2xl font-semibold mb-4">Upload New Mistakes</h2>
-          <ScreenshotUploader mockId={id} onUploadSuccess={fetchMistakes} />
-        </div>
-
-        {/* Uploaded Mistakes List */}
-        <div>
-          <h2 className="text-2xl font-semibold mb-4">Uploaded Screenshots</h2>
-          <div className="space-y-6">
-            {mistakes.length === 0 && <p className="text-gray-400">No mistakes uploaded yet.</p>}
-            {mistakes.map((mistake) => {
-              const filename = mistake.image_path.split(/[\\/]/).pop();
-              const imageUrl = `${API_URL}/uploads/${filename}`;
-              return (
-                <div key={mistake.id} className="bg-gray-800 p-4 rounded-lg">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Image Column */}
-                    <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <p className="text-sm font-semibold truncate">{filename}</p>
-                        <button onClick={() => handleDelete(mistake.id)} className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-2 rounded">
-                          Delete
-                        </button>
-                      </div>
-                      <img src={imageUrl} alt={`Mistake screenshot ${mistake.id}`} className="rounded-lg w-full" />
-                    </div>
-                    {/* Analysis Column */}
-                    <div className="flex flex-col">
-                      {mistake.analysis_text ? (
-                        <div className="prose prose-sm prose-invert max-w-none">
-                          <ReactMarkdown>{mistake.analysis_text}</ReactMarkdown>
+        {/* Upload & Mistakes Section */}
+        <div className="space-y-8">
+            {mock.sections.map(section => (
+                <div key={section.id} className="bg-gray-800 p-6 rounded-lg">
+                    <h2 className="text-2xl font-bold mb-4">{section.name}</h2>
+                    <div className="grid md:grid-cols-2 gap-8">
+                        {/* Incorrect */}
+                        <div>
+                            <h3 className="text-xl font-semibold mb-3">Incorrect Questions</h3>
+                            <ScreenshotUploader 
+                                mockId={id} 
+                                onUploadSuccess={fetchMistakes} 
+                                sectionName={section.name} 
+                                questionType="Incorrect"
+                            />
+                            <div className="space-y-4 mt-4">
+                                {mistakes.filter(m => m.section_name === section.name && m.question_type === 'Incorrect').map(mistake => (
+                                    <div key={mistake.id} className="bg-gray-700 p-3 rounded-lg">
+                                      <img src={`${API_URL}/uploads/${mistake.image_path.split(/[\\/]/).pop()}`} alt="Mistake" className="rounded w-full"/>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                      ) : (
-                        <div className="flex items-center gap-4">
-                          <button onClick={() => handleAnalyze(mistake.id, 'visual')} disabled={analyzingId === mistake.id} className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
-                            {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Visual'}
-                          </button>
-                          <button onClick={() => handleAnalyze(mistake.id, 'text')} disabled={analyzingId === mistake.id} className="bg-sky-600 hover:bg-sky-700 text-white font-bold text-sm py-1 px-3 rounded disabled:bg-gray-500">
-                            {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze as Text'}
-                          </button>
+                        {/* Unattempted */}
+                        <div>
+                            <h3 className="text-xl font-semibold mb-3">Unattempted Questions</h3>
+                            <ScreenshotUploader 
+                                mockId={id} 
+                                onUploadSuccess={fetchMistakes} 
+                                sectionName={section.name} 
+                                questionType="Unattempted"
+                            />
+                            <div className="space-y-4 mt-4">
+                                {mistakes.filter(m => m.section_name === section.name && m.question_type === 'Unattempted').map(mistake => (
+                                    <div key={mistake.id} className="bg-gray-700 p-3 rounded-lg">
+                                       <img src={`${API_URL}/uploads/${mistake.image_path.split(/[\\/]/).pop()}`} alt="Mistake" className="rounded w-full"/>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                      )}
                     </div>
-                  </div>
                 </div>
-              );
-            })}
-          </div>
+            ))}
         </div>
       </div>
     </main>

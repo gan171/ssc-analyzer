@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import MockForm from '@/components/MockForm';
+import TestbookImportForm from '@/components/TestbookImportForm'; // Import the new component
 
 // Define a type for our mock object
 type Mock = {
@@ -77,6 +78,7 @@ export default function HomePage() {
             </Link>
         </div>
 
+        <TestbookImportForm onMockImported={fetchMocks} />
         <MockForm onMockAdded={fetchMocks} />
 
         <div className="mt-12">

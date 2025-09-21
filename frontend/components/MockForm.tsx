@@ -29,6 +29,8 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
   const [overallScore, setOverallScore] = useState('');
   const [percentile, setPercentile] = useState('');
   const [sections, setSections] = useState(initialSections);
+  const [error, setError] = useState<string | null>(null);
+
 
   // This function updates the state when you type into any of the section input fields
   const handleSectionChange = (index: number, field: string, value: string) => {
@@ -39,6 +41,7 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    setError(null);
     
     // Prepare the data in the format our backend expects
     const payload = {
@@ -66,7 +69,8 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Network response was not ok');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Network response was not ok');
       }
 
       alert('Mock created successfully!');
@@ -77,9 +81,9 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
       setSections(initialSections);
       onMockAdded(); // This refreshes the mock list on the homepage
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting mock data:', error);
-      alert('Failed to create mock. See console for details.');
+      setError(error.message);
     }
   };
 
@@ -135,6 +139,8 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
           </div>
         ))}
       </div>
+      {error && <div className="text-red-500 text-sm">{error}</div>}
+
 
       <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
         Add Mock

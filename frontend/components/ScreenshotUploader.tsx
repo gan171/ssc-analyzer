@@ -6,9 +6,11 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 type UploaderProps = {
   mockId: string;
   onUploadSuccess: () => void;
+  sectionName: string;
+  questionType: 'Incorrect' | 'Unattempted';
 };
 
-export default function ScreenshotUploader({ mockId, onUploadSuccess }: UploaderProps) {
+export default function ScreenshotUploader({ mockId, onUploadSuccess, sectionName, questionType }: UploaderProps) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -47,6 +49,9 @@ export default function ScreenshotUploader({ mockId, onUploadSuccess }: Uploader
     files.forEach(file => {
       formData.append('files[]', file); // Use 'files[]' to send as a list
     });
+    formData.append('section_name', sectionName);
+    formData.append('question_type', questionType);
+
 
     try {
       const response = await fetch(`${API_URL}/api/mocks/${mockId}/mistakes`, {
@@ -70,7 +75,7 @@ export default function ScreenshotUploader({ mockId, onUploadSuccess }: Uploader
   return (
     <form onSubmit={handleSubmit} className="w-full">
       <label 
-        htmlFor="file-upload" 
+        htmlFor={`file-upload-${sectionName}-${questionType}`}
         className={`flex flex-col items-center justify-center w-full h-32 px-4 transition bg-gray-800 border-2 border-dashed rounded-md appearance-none cursor-pointer hover:border-gray-400 focus:outline-none ${isDragging ? "border-green-400" : "border-gray-600"}`}
         onDragEnter={(e) => handleDrag(e, true)}
         onDragLeave={(e) => handleDrag(e, false)}
@@ -86,7 +91,7 @@ export default function ScreenshotUploader({ mockId, onUploadSuccess }: Uploader
           </span>
         </span>
         <input 
-          id="file-upload"
+          id={`file-upload-${sectionName}-${questionType}`}
           type="file" 
           name="files[]"
           className="hidden" // We hide the default input

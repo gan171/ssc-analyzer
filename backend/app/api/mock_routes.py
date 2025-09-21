@@ -9,6 +9,9 @@ from PIL import Image
 import pytesseract
 from flask_cors import cross_origin
 from app.models.section import Section
+from app.api.testbook_scraper import scrape_testbook_data
+import traceback
+from flask import current_app
 
 api_blueprint = Blueprint('api', __name__)
 
@@ -36,6 +39,39 @@ def handle_mocks():
         data = request.get_json()
         if not data or 'name' not in data or 'score_overall' not in data or 'sections' not in data:
             return jsonify({"error": "Missing required fields"}), 400
+
+        # Validation Guards
+        total_sectional_score = 0
+        total_time_taken = 0
+        for section in data['sections']:
+            # Guard: Ensure question counts are not negative
+            if any(count < 0 for count in [section['correct_count'], section['incorrect_count'], section['unattempted_count']]):
+                return jsonify({"error": f"Question counts for section {section['name']} cannot be negative."}), 400
+            
+            # Guard: Ensure section score is not more than 50
+            if section['score'] > 50:
+                return jsonify({"error": f"Score for section {section['name']} cannot be greater than 50."}), 400
+            # Rule 1: Validate section score
+            calculated_score = (section['correct_count'] * 2) - (section['incorrect_count'] * 0.5)
+            if calculated_score != section['score']:
+                return jsonify({"error": f"Invalid score for section {section['name']}. Expected {calculated_score}, but got {section['score']}."}), 400
+
+            # Rule 2: Validate number of questions
+            total_questions = section['correct_count'] + section['incorrect_count'] + section['unattempted_count']
+            if total_questions != 25:
+                return jsonify({"error": f"Invalid question count for section {section['name']}. The sum of correct, incorrect, and unattempted questions must be 25."}), 400
+            
+            total_sectional_score += section['score']
+            total_time_taken += section['time_taken_seconds']
+        
+        # Rule 3: Validate total score
+        if round(total_sectional_score, 2) != round(data['score_overall'], 2):
+            return jsonify({"error": f"The sum of sectional scores ({total_sectional_score}) does not match the overall mock score ({data['score_overall']})."}), 400
+
+        # Rule 4: Validate total time
+        if total_time_taken > 3600:
+            return jsonify({"error": f"Total time taken ({total_time_taken} seconds) cannot exceed 60 minutes."}), 400
+
 
         # Create the parent Mock object
         new_mock = Mock(
@@ -107,6 +143,7 @@ def handle_single_mock(mock_id):
 
 
 # --- MISTAKE ROUTES ---
+# --- MISTAKE ROUTES ---
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])
 def handle_mistakes(mock_id):
     if request.method == 'GET':
@@ -116,7 +153,9 @@ def handle_mistakes(mock_id):
                 "id": mistake.id,
                 "image_path": mistake.image_path.replace('\\', '/'),
                 "analysis_text": mistake.analysis_text,
-                "topic": mistake.topic
+                "topic": mistake.topic,
+                "section_name": mistake.section_name,
+                "question_type": mistake.question_type
             } for mistake in mistakes
         ]
         return jsonify(result), 200
@@ -124,6 +163,12 @@ def handle_mistakes(mock_id):
     if request.method == 'POST':
         if 'files[]' not in request.files:
             return jsonify({"error": "No file part"}), 400
+        
+        section_name = request.form.get('section_name')
+        question_type = request.form.get('question_type')
+
+        if not section_name or not question_type:
+            return jsonify({"error": "Missing section_name or question_type"}), 400
         
         files = request.files.getlist('files[]')
         
@@ -135,11 +180,17 @@ def handle_mistakes(mock_id):
                 filename = secure_filename(file.filename)
                 file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 file.save(file_path)
-                new_mistake = Mistake(mock_id=mock_id, image_path=filename)
+                new_mistake = Mistake(
+                    mock_id=mock_id, 
+                    image_path=filename,
+                    section_name=section_name,
+                    question_type=question_type
+                )
                 db.session.add(new_mistake)
         
         db.session.commit()
         return jsonify({"message": f"{len(files)} files uploaded successfully"}), 201
+
 
 @api_blueprint.route("/mistakes/<int:mistake_id>/analyze-visual", methods=['POST'])
 def analyze_visual(mistake_id):
@@ -240,3 +291,24 @@ def delete_mistake(mistake_id):
 # You already had a delete mock function, but it was attached to the wrong route.
 # This code combines the GET and DELETE handlers for a single mock into one function.
 # I have removed the duplicate delete_mock function.
+@api_blueprint.route("/mocks/import-from-testbook", methods=['POST'])
+def import_from_testbook():
+    try:
+        data = request.get_json()
+        cookies = data.get('cookies')
+        url = data.get('url')
+
+        if not cookies or not url:
+            return jsonify({"error": "Missing cookies or URL"}), 400
+
+        mock_id = scrape_testbook_data(cookies, url)
+        
+        if mock_id:
+            return jsonify({"message": "Mock imported successfully!", "mock_id": mock_id}), 201
+        else:
+            return jsonify({"error": "Failed to import mock data."}), 500
+
+    except Exception as e:
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({"error": "An internal error occurred", "message": str(e)}), 500
