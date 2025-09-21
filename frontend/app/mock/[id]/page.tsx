@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import ScreenshotUploader from '../../../components/ScreenshotUploader';
+import MistakeFocusView from '@/components/MistakeFocusView';
 
 // Define the types for our data structures
 interface Section {
