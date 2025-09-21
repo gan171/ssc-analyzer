@@ -47,7 +47,7 @@ def handle_mocks():
             # Guard: Ensure question counts are not negative
             if any(count < 0 for count in [section['correct_count'], section['incorrect_count'], section['unattempted_count']]):
                 return jsonify({"error": f"Question counts for section {section['name']} cannot be negative."}), 400
-            
+
             # Guard: Ensure section score is not more than 50
             if section['score'] > 50:
                 return jsonify({"error": f"Score for section {section['name']} cannot be greater than 50."}), 400
@@ -60,10 +60,10 @@ def handle_mocks():
             total_questions = section['correct_count'] + section['incorrect_count'] + section['unattempted_count']
             if total_questions != 25:
                 return jsonify({"error": f"Invalid question count for section {section['name']}. The sum of correct, incorrect, and unattempted questions must be 25."}), 400
-            
+
             total_sectional_score += section['score']
             total_time_taken += section['time_taken_seconds']
-        
+
         # Rule 3: Validate total score
         if round(total_sectional_score, 2) != round(data['score_overall'], 2):
             return jsonify({"error": f"The sum of sectional scores ({total_sectional_score}) does not match the overall mock score ({data['score_overall']})."}), 400
@@ -99,6 +99,19 @@ def handle_mocks():
         db.session.commit()
         return jsonify({"message": "Mock created successfully!", "mock_id": new_mock.id}), 201
 
+# --- ADD THIS NEW ROUTE ---
+@api_blueprint.route("/mocks/<int:mock_id>/toggle-analysis-status", methods=['PATCH'])
+def toggle_analysis_status(mock_id):
+    """Toggles the analysis completion status of a mock."""
+    try:
+        mock = Mock.query.get_or_404(mock_id)
+        mock.is_analyzed = not mock.is_analyzed
+        db.session.commit()
+        return jsonify({"message": "Status updated successfully", "is_analyzed": mock.is_analyzed}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to update status", "message": str(e)}), 500
+
 
 @api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'DELETE'])
 def handle_single_mock(mock_id):
@@ -133,7 +146,7 @@ def handle_single_mock(mock_id):
                 full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
                 if os.path.exists(full_image_path):
                     os.remove(full_image_path)
-            
+
             db.session.delete(mock)
             db.session.commit()
             return jsonify({"message": "Mock and all its mistakes deleted successfully"}), 200
@@ -142,7 +155,6 @@ def handle_single_mock(mock_id):
             return jsonify({"error": "Failed to delete mock", "message": str(e)}), 500
 
 
-# --- MISTAKE ROUTES ---
 # --- MISTAKE ROUTES ---
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])
 def handle_mistakes(mock_id):
@@ -163,15 +175,15 @@ def handle_mistakes(mock_id):
     if request.method == 'POST':
         if 'files[]' not in request.files:
             return jsonify({"error": "No file part"}), 400
-        
+
         section_name = request.form.get('section_name')
         question_type = request.form.get('question_type')
 
         if not section_name or not question_type:
             return jsonify({"error": "Missing section_name or question_type"}), 400
-        
+
         files = request.files.getlist('files[]')
-        
+
         if not files or all(file.filename == '' for file in files):
             return jsonify({"error": "No selected files"}), 400
 
@@ -181,13 +193,13 @@ def handle_mistakes(mock_id):
                 file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                 file.save(file_path)
                 new_mistake = Mistake(
-                    mock_id=mock_id, 
+                    mock_id=mock_id,
                     image_path=filename,
                     section_name=section_name,
                     question_type=question_type
                 )
                 db.session.add(new_mistake)
-        
+
         db.session.commit()
         return jsonify({"message": f"{len(files)} files uploaded successfully"}), 201
 
@@ -205,15 +217,15 @@ def analyze_visual(mistake_id):
         genai.configure(api_key=api_key)
         img = Image.open(full_image_path)
         model = genai.GenerativeModel('gemini-1.5-flash')
-        
+
         prompt = """
         You are an expert tutor for the Indian SSC CGL exam. Analyze this screenshot...
         IMPORTANT: Start your entire response with the most specific topic and sub-topic on a single line, formatted like this:
         TOPIC: Maths > Geometry > Circles > Tangent-secant theorem
         """
-        
+
         response = model.generate_content([prompt, img])
-        
+
         full_response_text = response.text
         lines = full_response_text.split('\n')
         topic_line = lines[0] if lines and lines[0].strip().startswith("TOPIC:") else "TOPIC: Uncategorized"
@@ -245,14 +257,14 @@ def analyze_text(mistake_id):
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-pro')
-        
+
         prompt = f"""
         You are an expert tutor for the Indian SSC CGL exam. Analyze the following question text...
         The question text is: "{extracted_text}"
         IMPORTANT: Start your entire response with the most specific topic and sub-topic on a single line, formatted like this:
         TOPIC: English > Grammar > Reported Speech
         """
-        
+
         response = model.generate_content(prompt)
 
         full_response_text = response.text
@@ -264,10 +276,106 @@ def analyze_text(mistake_id):
         mistake.topic = topic
         mistake.analysis_text = analysis_body
         db.session.commit()
-        
+
         return jsonify({"analysis": analysis_body})
     except Exception as e:
         return jsonify({"error": "Failed to analyze with Gemini Text model", "message": str(e)}), 500
+
+# --- NEW BULK ANALYSIS ROUTE ---
+@api_blueprint.route("/mocks/<int:mock_id>/analyze-all-mistakes", methods=['POST'])
+def analyze_all_mistakes(mock_id):
+    """
+    Analyzes all unanalyzed mistakes for a given mock.
+    Differentiates between visual and text-based questions and processes them in batches.
+    """
+    api_key = os.environ.get('GEMINI_API_KEY')
+    if not api_key:
+        return jsonify({"error": "Gemini API key is not configured"}), 500
+
+    genai.configure(api_key=api_key)
+
+    unanalyzed_mistakes = Mistake.query.filter_by(mock_id=mock_id, analysis_text=None).all()
+    if not unanalyzed_mistakes:
+        return jsonify({"message": "No unanalyzed mistakes found."}), 200
+
+    text_mistakes = []
+    visual_mistakes = []
+
+    # Differentiate between text and visual mistakes
+    for mistake in unanalyzed_mistakes:
+        full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+        try:
+            img = Image.open(full_image_path)
+            extracted_text = pytesseract.image_to_string(img)
+            # Simple heuristic: if text is reasonably long, treat as text-based
+            if len(extracted_text.strip()) > 50:
+                text_mistakes.append((mistake, extracted_text))
+            else:
+                visual_mistakes.append(mistake)
+        except Exception as e:
+            # If OCR fails, assume it's a visual mistake
+            print(f"Error processing image {mistake.image_path}: {e}")
+            visual_mistakes.append(mistake)
+
+    # Process visual mistakes one by one
+    for mistake in visual_mistakes:
+        analyze_visual(mistake.id)
+
+    # Process text mistakes in batches
+    BATCH_SIZE = 5
+    for i in range(0, len(text_mistakes), BATCH_SIZE):
+        batch = text_mistakes[i:i + BATCH_SIZE]
+        try:
+            _analyze_text_batch(batch)
+        except Exception as e:
+            print(f"Error analyzing text batch: {e}")
+            # Decide how to handle batch failures, e.g., log them
+            # For simplicity, we'll just print the error for now
+
+    db.session.commit()
+    return jsonify({"message": "Bulk analysis complete."}), 200
+
+def _analyze_text_batch(batch):
+    """
+    Helper function to analyze a batch of text-based mistakes.
+    """
+    model = genai.GenerativeModel('gemini-pro')
+    
+    # Create a combined prompt for the entire batch
+    prompt_parts = [
+        "You are an expert tutor for the Indian SSC CGL exam. You will be given a list of questions extracted via OCR. For each question, provide a topic and a detailed analysis.",
+        "Provide the response as a numbered list, where each number corresponds to the question in the input.",
+        "Each item in the list must follow this format:",
+        "START_OF_ANALYSIS",
+        "TOPIC: [Your Topic Here]",
+        "[Your detailed analysis here]",
+        "END_OF_ANALYSIS",
+        "\n--- QUESTIONS ---"
+    ]
+
+    for idx, (mistake, text) in enumerate(batch):
+        prompt_parts.append(f"\n{idx + 1}. Question ID {mistake.id}:\n\"\"\"{text}\"\"\"")
+
+    prompt = "\n".join(prompt_parts)
+    
+    response = model.generate_content(prompt)
+    
+    # Parse the batched response
+    analyses = response.text.split("START_OF_ANALYSIS")[1:]
+    
+    for idx, analysis_text in enumerate(analyses):
+        if idx < len(batch):
+            mistake, _ = batch[idx]
+            clean_analysis = analysis_text.split("END_OF_ANALYSIS")[0].strip()
+            
+            lines = clean_analysis.split('\n')
+            topic_line = lines[0] if lines and lines[0].strip().startswith("TOPIC:") else "TOPIC: Uncategorized"
+            analysis_body = "\n".join(lines[1:]).strip()
+            topic = topic_line.replace("TOPIC:", "").strip()
+            
+            mistake.topic = topic
+            mistake.analysis_text = analysis_body
+
 
 @api_blueprint.route("/uploads/<path:filename>")
 def serve_upload(filename):
@@ -288,9 +396,6 @@ def delete_mistake(mistake_id):
         db.session.rollback()
         return jsonify({"error": "Failed to delete mistake", "message": str(e)}), 500
 
-# You already had a delete mock function, but it was attached to the wrong route.
-# This code combines the GET and DELETE handlers for a single mock into one function.
-# I have removed the duplicate delete_mock function.
 @api_blueprint.route("/mocks/import-from-testbook", methods=['POST'])
 def import_from_testbook():
     try:
@@ -302,7 +407,7 @@ def import_from_testbook():
             return jsonify({"error": "Missing cookies or URL"}), 400
 
         mock_id = scrape_testbook_data(cookies, url)
-        
+
         if mock_id:
             return jsonify({"message": "Mock imported successfully!", "mock_id": mock_id}), 201
         else:
@@ -312,9 +417,3 @@ def import_from_testbook():
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": "An internal error occurred", "message": str(e)}), 500
-
-# --- ADD THIS NEW ROUTE ---
-@api_blueprint.route('/uploads/<path:filename>')
-def serve_upload(filename):
-    """Serves a file from the uploads directory."""
-    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)

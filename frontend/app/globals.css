@@ -35,3 +35,20 @@ input::-webkit-inner-spin-button {
 input[type=number] {
   -moz-appearance: textfield;
 }
+/* --- NProgress Customization --- */
+@import 'nprogress/nprogress.css';
+
+#nprogress .bar {
+  background: #6366F1 !important;
+  /* Indigo color */
+  height: 3px !important;
+}
+
+#nprogress .peg {
+  box-shadow: 0 0 10px #6366F1, 0 0 5px #6366F1 !important;
+}
+
+#nprogress .spinner-icon {
+  border-top-color: #6366F1 !important;
+  border-left-color: #6366F1 !important;
+}

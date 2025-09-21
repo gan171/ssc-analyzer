@@ -1,14 +1,10 @@
 'use client';
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import ScreenshotUploader from '@/components/ScreenshotUploader';
-import ReactMarkdown from 'react-markdown';
+import ScreenshotUploader from '../../../components/ScreenshotUploader';
 
-// --- TYPE DEFINITIONS ---
-// Defines the structure for a single section's data
-type Section = {
+// Define the types for our data structures
+interface Section {
   id: number;
   name: string;
   score: number;
@@ -16,237 +12,252 @@ type Section = {
   incorrect_count: number;
   unattempted_count: number;
   time_taken_seconds: number;
-};
+}
 
-// Defines the structure for the main mock object, including its sections
-type MockDetails = {
+interface Mock {
   id: number;
   name: string;
   score_overall: number;
   percentile_overall: number;
   date_taken: string;
   sections: Section[];
-};
+}
 
-// Defines the structure for a single mistake, now including the topic
-type Mistake = {
+interface Mistake {
   id: number;
   image_path: string;
   analysis_text: string | null;
-  topic: string | null; // Added the topic field
+  topic: string | null;
   section_name: string;
   question_type: string;
-};
+}
 
-// --- COMPONENT ---
-export default function MockDetailPage() {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+const MockDetailPage = () => {
   const params = useParams();
-  const id = params.id as string;
+  const id = params.id;
 
-  // --- STATE MANAGEMENT ---
-  const [mock, setMock] = useState<MockDetails | null>(null);
+  const [mock, setMock] = useState<Mock | null>(null);
   const [mistakes, setMistakes] = useState<Mistake[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [analyzingId, setAnalyzingId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showUploader, setShowUploader] = useState(false);
+  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedQuestionType, setSelectedQuestionType] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Read the API URL from the environment file
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
-
-  // --- DATA FETCHING FUNCTIONS ---
-  const fetchMistakes = async () => {
+  const fetchMistakes = useCallback(async () => {
     if (!id) return;
     try {
-      const response = await fetch(`${API_URL}/api/mocks/${id}/mistakes`);
-      if (!response.ok) throw new Error('Failed to fetch mistakes');
-      const data = await response.json();
+      const res = await fetch(`${API_BASE_URL}/mocks/${id}/mistakes`);
+      if (!res.ok) throw new Error('Failed to fetch mistakes');
+      const data = await res.json();
       setMistakes(data);
-    } catch (error) {
-      console.error("Error fetching mistakes:", error);
+    } catch (err) {
+      console.error(err);
     }
-  };
+  }, [id]);
 
-  // --- EFFECT HOOK to load all initial data ---
   useEffect(() => {
-    if (id && API_URL) {
-      const fetchInitialData = async () => {
-        setLoading(true);
-        try {
-          const mockDetailsResponse = await fetch(`${API_URL}/api/mocks/${id}`);
-          if (!mockDetailsResponse.ok) throw new Error('Failed to fetch mock details');
-          const mockData = await mockDetailsResponse.json();
-          setMock(mockData);
-          await fetchMistakes();
-        } catch (error) {
-          console.error(error);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchInitialData();
-    }
-  }, [id, API_URL]);
-
-  // --- HANDLER FUNCTIONS ---
-  const handleDelete = async (mistakeId: number) => {
-    if (!window.confirm("Are you sure you want to delete this mistake?")) {
-      return;
-    }
-    try {
-      const response = await fetch(`${API_URL}/api/mistakes/${mistakeId}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete mistake');
-      setMistakes(currentMistakes => currentMistakes.filter(m => m.id !== mistakeId));
-      alert('Mistake deleted successfully!');
-    } catch (error) {
-      console.error("Delete error:", error);
-      alert("Failed to delete the mistake.");
-    }
-  };
-
-  const handleAnalyze = async (mistakeId: number, analysisType: 'visual' | 'text') => {
-    setAnalyzingId(mistakeId);
-    try {
-      const response = await fetch(`${API_URL}/api/mistakes/${mistakeId}/analyze-${analysisType}`, { method: 'POST' });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Analysis failed');
+    const fetchMock = async () => {
+      if (!id) return;
+      setIsLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/mocks/${id}`);
+        if (!res.ok) throw new Error('Failed to fetch mock details');
+        const data = await res.json();
+        setMock(data);
+        await fetchMistakes();
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
       }
-      // After a successful analysis, re-fetch the mistakes list to get the new analysis and topic
-      await fetchMistakes();
-    } catch (error: any) {
-      console.error(`Analysis error (${analysisType}):`, error);
-      alert(`Failed to get analysis: ${error.message}`);
-    } finally {
-      setAnalyzingId(null);
+    };
+    fetchMock();
+  }, [id, fetchMistakes]);
+
+  const handleUploadComplete = () => {
+    setShowUploader(false);
+    fetchMistakes();
+  };
+
+  const handleAnalyzeClick = async (mistakeId: number, analysisType: 'visual' | 'text') => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/analyze-${analysisType}`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Analysis failed');
+      }
+      fetchMistakes();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
     }
   };
 
-  // --- RENDER LOGIC ---
-  if (loading) return <div className="text-center p-24">Loading...</div>;
-  if (!mock) return <div className="text-center p-24">Mock not found.</div>;
+  const handleDeleteMistake = async (mistakeId: number) => {
+    if (window.confirm('Are you sure you want to delete this mistake?')) {
+      try {
+        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}`, {
+          method: 'DELETE',
+        });
+        if (!res.ok) throw new Error('Failed to delete mistake');
+        fetchMistakes();
+      } catch (err: any) {
+        alert(`Error: ${err.message}`);
+      }
+    }
+  };
+  
+  const handleBulkAnalyze = async () => {
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/mocks/${id}/analyze-all-mistakes`, {
+        method: 'POST',
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Bulk analysis failed');
+      }
+      alert('Bulk analysis complete!');
+      fetchMistakes();
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
-  const renderMistakeCard = (mistake: Mistake) => (
-    <div key={mistake.id} className="bg-gray-700 p-4 rounded-lg space-y-3">
-        {/* Corrected Image Source */}
-        <img 
-            src={`${API_URL}/api/uploads/${mistake.image_path}`} 
-            alt={`Mistake for section ${mistake.section_name}`} 
-            className="rounded w-full"
-        />
+  if (isLoading) return <div className="text-center mt-8">Loading...</div>;
+  if (error) return <div className="text-center mt-8 text-red-500">Error: {error}</div>;
+  if (!mock) return <div className="text-center mt-8">Mock not found.</div>;
 
-        {/* Display Topic and Analysis */}
-        {mistake.topic && (
-            <p className="text-sm"><span className="font-semibold text-gray-300">Topic:</span> {mistake.topic}</p>
-        )}
-        {mistake.analysis_text && (
-            <div className="prose prose-sm prose-invert text-gray-200">
-                <ReactMarkdown>{mistake.analysis_text}</ReactMarkdown>
-            </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-600">
-            <button
-                onClick={() => handleAnalyze(mistake.id, 'visual')}
-                disabled={analyzingId === mistake.id}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 text-white font-bold py-1 px-3 rounded text-xs"
-            >
-                {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze Mistake'}
-            </button>
-            <button
-                onClick={() => handleDelete(mistake.id)}
-                disabled={analyzingId === mistake.id}
-                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white font-bold py-1 px-3 rounded text-xs"
-            >
-                Delete
-            </button>
-        </div>
-    </div>
-  );
+  const hasUnanalyzedMistakes = mistakes.some(m => !m.analysis_text);
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 md:p-12 bg-gray-900 text-white">
-      <div className="w-full max-w-6xl">
-        <Link href="/" className="text-blue-400 hover:underline mb-8 block">&larr; Back to All Mocks</Link>
-        
-        {/* Mock Header */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-          <h1 className="text-3xl font-bold">{mock.name}</h1>
-          <p className="text-gray-300 mt-2">Score: {mock.score_overall}</p>
-          <p className="text-gray-300">Percentile: {mock.percentile_overall}%</p>
-        </div>
-
-        {/* Sectional Breakdown Table */}
-        <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-12">
-            <h2 className="text-2xl font-bold mb-4">Sectional Breakdown</h2>
-            <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="border-b border-gray-600">
-                            <th className="p-2">Section</th>
-                            <th className="p-2">Score</th>
-                            <th className="p-2">Correct</th>
-                            <th className="p-2">Incorrect</th>
-                            <th className="p-2">Unattempted</th>
-                            <th className="p-2">Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {mock.sections.map((section) => (
-                            <tr key={section.id} className="border-b border-gray-700 last:border-b-0">
-                                <td className="p-2 font-semibold">{section.name}</td>
-                                <td className="p-2">{section.score}</td>
-                                <td className="p-2 text-green-400">{section.correct_count}</td>
-                                <td className="p-2 text-red-400">{section.incorrect_count}</td>
-                                <td className="p-2 text-gray-400">{section.unattempted_count}</td>
-                                <td className="p-2">{Math.floor(section.time_taken_seconds / 60)}m {section.time_taken_seconds % 60}s</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        {/* Upload & Mistakes Section */}
-        <div className="space-y-8">
-            {mock.sections.map(section => (
-                <div key={section.id} className="bg-gray-800 p-6 rounded-lg">
-                    <h2 className="text-2xl font-bold mb-4">{section.name}</h2>
-                    <div className="grid md:grid-cols-2 gap-8">
-                        {/* Incorrect */}
-                        <div>
-                            <h3 className="text-xl font-semibold mb-3">Incorrect Questions</h3>
-                            <ScreenshotUploader 
-                                mockId={id} 
-                                onUploadSuccess={fetchMistakes} 
-                                sectionName={section.name} 
-                                questionType="Incorrect"
-                            />
-                            <div className="space-y-4 mt-4">
-                                {mistakes
-                                    .filter(m => m.section_name === section.name && m.question_type === 'Incorrect')
-                                    .map(renderMistakeCard)}
-                            </div>
-                        </div>
-                        {/* Unattempted */}
-                        <div>
-                            <h3 className="text-xl font-semibold mb-3">Unattempted Questions</h3>
-                            <ScreenshotUploader 
-                                mockId={id} 
-                                onUploadSuccess={fetchMistakes} 
-                                sectionName={section.name} 
-                                questionType="Unattempted"
-                            />
-                            <div className="space-y-4 mt-4">
-                                {mistakes
-                                    .filter(m => m.section_name === section.name && m.question_type === 'Unattempted')
-                                    .map(renderMistakeCard)}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ))}
+    <div className="container mx-auto p-4 md:p-8">
+      <div className="bg-gray-800 shadow-xl rounded-lg p-6 mb-8 text-white">
+        <h1 className="text-4xl font-bold mb-2">{mock.name}</h1>
+        <p className="text-gray-400 text-lg mb-4">Taken on: {new Date(mock.date_taken).toLocaleDateString()}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-center">
+          <div className="bg-gray-700 p-4 rounded-lg">
+            <p className="text-xl text-gray-300">Overall Score</p>
+            <p className="text-3xl font-semibold text-green-400">{mock.score_overall}</p>
+          </div>
+          <div className="bg-gray-700 p-4 rounded-lg">
+            <p className="text-xl text-gray-300">Percentile</p>
+            <p className="text-3xl font-semibold text-blue-400">{mock.percentile_overall}%</p>
+          </div>
         </div>
       </div>
-    </main>
+
+      <div className="mb-8">
+        <h2 className="text-3xl font-bold mb-4 text-gray-200">Sections</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {mock.sections.map((section) => (
+            <div key={section.id} className="bg-gray-800 shadow-lg rounded-lg p-4 text-white">
+              <h3 className="text-xl font-semibold text-indigo-400 mb-2">{section.name}</h3>
+              <p>Score: <span className="font-medium text-green-400">{section.score}</span></p>
+              <p>Correct: <span className="font-medium text-gray-300">{section.correct_count}</span></p>
+              <p>Incorrect: <span className="font-medium text-gray-300">{section.incorrect_count}</span></p>
+              <p>Unattempted: <span className="font-medium text-gray-300">{section.unattempted_count}</span></p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-3xl font-bold text-gray-200">Mistakes</h2>
+          <div>
+            {hasUnanalyzedMistakes && (
+              <button
+                onClick={handleBulkAnalyze}
+                disabled={isAnalyzing}
+                className="bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed mr-4"
+              >
+                {isAnalyzing ? 'Analyzing...' : 'Analyze All Mistakes'}
+              </button>
+            )}
+            <button
+              onClick={() => setShowUploader(!showUploader)}
+              className="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700"
+            >
+              {showUploader ? 'Cancel' : 'Add Mistakes'}
+            </button>
+          </div>
+        </div>
+
+        {showUploader && (
+          <div className="bg-gray-800 p-6 rounded-lg mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+               <div>
+                 <label htmlFor="section" className="block text-sm font-medium text-gray-300 mb-1">Section</label>
+                 <select
+                   id="section"
+                   value={selectedSection}
+                   onChange={(e) => setSelectedSection(e.target.value)}
+                   className="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                 >
+                   <option value="">Select a Section</option>
+                   {mock.sections.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                 </select>
+               </div>
+               <div>
+                 <label htmlFor="questionType" className="block text-sm font-medium text-gray-300 mb-1">Question Type</label>
+                 <select
+                   id="questionType"
+                   value={selectedQuestionType}
+                   onChange={(e) => setSelectedQuestionType(e.target.value)}
+                   className="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                 >
+                   <option value="">Select Type</option>
+                   <option value="Incorrect">Incorrect</option>
+                   <option value="Unattempted">Unattempted</option>
+                 </select>
+               </div>
+            </div>
+            {/* --- FIX IS HERE --- We check for mock before rendering the uploader */}
+            {selectedSection && selectedQuestionType && mock ? (
+              <ScreenshotUploader
+                mockId={mock.id}
+                sectionName={selectedSection}
+                questionType={selectedQuestionType}
+                onUploadComplete={handleUploadComplete}
+              />
+            ) : <p className="text-gray-400">Please select a section and question type to begin uploading.</p>}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {mistakes.map((mistake) => (
+            <div key={mistake.id} className="bg-gray-800 shadow-lg rounded-lg overflow-hidden">
+              <img src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>
+              <div className="p-4">
+                <p className="text-sm text-gray-400 mb-2">Section: {mistake.section_name} ({mistake.question_type})</p>
+                {mistake.analysis_text ? (
+                  <div>
+                    <h4 className="font-bold text-indigo-400">{mistake.topic || 'Analysis'}</h4>
+                    <p className="text-gray-300 whitespace-pre-wrap">{mistake.analysis_text}</p>
+                  </div>
+                ) : (
+                  <div className="flex space-x-2 mt-2">
+                    <button onClick={() => handleAnalyzeClick(mistake.id, 'visual')} className="text-sm bg-green-600 text-white font-semibold py-1 px-3 rounded hover:bg-green-700">Analyze (Visual)</button>
+                    <button onClick={() => handleAnalyzeClick(mistake.id, 'text')} className="text-sm bg-yellow-600 text-white font-semibold py-1 px-3 rounded hover:bg-yellow-700">Analyze (Text)</button>
+                  </div>
+                )}
+                 <button onClick={() => handleDeleteMistake(mistake.id)} className="text-xs text-red-400 hover:text-red-500 mt-4">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {mistakes.length === 0 && <p className="text-gray-400">No mistakes have been added for this mock yet.</p>}
+      </div>
+    </div>
   );
-}
+};
+
+export default MockDetailPage;
