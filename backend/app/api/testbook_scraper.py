@@ -4,7 +4,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
 from bs4 import BeautifulSoup
 import re
 import time
@@ -100,21 +99,28 @@ def scrape_testbook_data(cookies, url):
                     question_panel_locator = (By.CSS_SELECTOR, ".detailed-question")
                     question_panel = WebDriverWait(driver, 15).until(EC.visibility_of_element_located(question_panel_locator))
                     
+                    # Store current question text to detect change
+                    current_question_text = question_panel.text
+                    
                     soup_question = BeautifulSoup(driver.page_source, 'html.parser')
                     
+                    # More reliable selectors for status and section
                     status_badge = soup_question.select_one(".tp-info .badge")
                     status = status_badge.text.strip() if status_badge else "Unattempted"
-                    section_tag = soup_question.select_one("div.mob-sidebar-section")
-                    section_name = section_tag.text.replace("Section :", "").strip() if section_tag else "Unknown Section"
+                    
+                    active_section_tab = soup_question.select_one("#sectionNavTabs li.active a span.hidden-xs")
+                    section_name = active_section_tab.text.strip() if active_section_tab else "Unknown Section"
 
                     print(f"Details: Q{i}, Status: {status}, Section: {section_name}")
 
-                    if status in ['Incorrect', 'Unattempted', 'Wrong']:
+                    # Updated condition to include 'Skipped' and 'Unattempted'
+                    if status in ['Incorrect', 'Unattempted', 'Wrong', 'Skipped']:
                         filename = f"mistake_{new_mock_id}_{i}_{uuid.uuid4()}.png"
                         filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                         question_panel.screenshot(filepath)
                         
-                        new_mistake = Mistake(mock_id=new_mock_id, image_path=filename, section_name=section_name, question_type=status)
+                        mistake_status = status if status != 'Skipped' else 'Unattempted'
+                        new_mistake = Mistake(mock_id=new_mock_id, image_path=filename, section_name=section_name, question_type=mistake_status)
                         db.session.add(new_mistake)
                         db.session.commit()
 
@@ -122,11 +128,13 @@ def scrape_testbook_data(cookies, url):
                         next_button_locator = (By.CSS_SELECTOR, 'button[ng-click="navBtnPressed(true)"]')
                         next_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(next_button_locator))
                         
-                        actions = ActionChains(driver)
-                        actions.move_to_element(next_button).click().perform()
+                        # Use JavaScript to click the button for reliability
+                        driver.execute_script("arguments[0].click();", next_button)
 
-                        # Wait for the old question panel to become stale (disappear)
-                        WebDriverWait(driver, 15).until(EC.staleness_of(question_panel))
+                        # Wait for the question panel to update with new content
+                        WebDriverWait(driver, 15).until(
+                            lambda driver: driver.find_element(*question_panel_locator).text != current_question_text
+                        )
                         print(f"Successfully navigated to the next question.")
 
                 except Exception as loop_error:

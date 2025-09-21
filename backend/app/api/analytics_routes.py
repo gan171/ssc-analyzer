@@ -1,10 +1,7 @@
 from flask import Blueprint, jsonify
-from app.extensions import db
-from app.models.mistake import Mistake
-from app.models.mock import Mock
-from app.models.section import Section
+from ..models.mock import Mock  # Corrected relative import
+from ..models.mistake import Mistake # Corrected relative import
 from sqlalchemy import func
-
 analytics_blueprint = Blueprint('analytics', __name__)
 
 @analytics_blueprint.route("/analytics/topic-summary", methods=['GET'])

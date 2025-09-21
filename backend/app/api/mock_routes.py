@@ -312,3 +312,9 @@ def import_from_testbook():
         traceback.print_exc()
         db.session.rollback()
         return jsonify({"error": "An internal error occurred", "message": str(e)}), 500
+
+# --- ADD THIS NEW ROUTE ---
+@api_blueprint.route('/uploads/<path:filename>')
+def serve_upload(filename):
+    """Serves a file from the uploads directory."""
+    return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)

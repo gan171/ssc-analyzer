@@ -50,7 +50,7 @@ export default function MockDetailPage() {
   const [analyzingId, setAnalyzingId] = useState<number | null>(null);
 
   // Read the API URL from the environment file
-  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000';
 
   // --- DATA FETCHING FUNCTIONS ---
   const fetchMistakes = async () => {
@@ -124,6 +124,45 @@ export default function MockDetailPage() {
   if (loading) return <div className="text-center p-24">Loading...</div>;
   if (!mock) return <div className="text-center p-24">Mock not found.</div>;
 
+  const renderMistakeCard = (mistake: Mistake) => (
+    <div key={mistake.id} className="bg-gray-700 p-4 rounded-lg space-y-3">
+        {/* Corrected Image Source */}
+        <img 
+            src={`${API_URL}/api/uploads/${mistake.image_path}`} 
+            alt={`Mistake for section ${mistake.section_name}`} 
+            className="rounded w-full"
+        />
+
+        {/* Display Topic and Analysis */}
+        {mistake.topic && (
+            <p className="text-sm"><span className="font-semibold text-gray-300">Topic:</span> {mistake.topic}</p>
+        )}
+        {mistake.analysis_text && (
+            <div className="prose prose-sm prose-invert text-gray-200">
+                <ReactMarkdown>{mistake.analysis_text}</ReactMarkdown>
+            </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2 pt-3 border-t border-gray-600">
+            <button
+                onClick={() => handleAnalyze(mistake.id, 'visual')}
+                disabled={analyzingId === mistake.id}
+                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-500 text-white font-bold py-1 px-3 rounded text-xs"
+            >
+                {analyzingId === mistake.id ? 'Analyzing...' : 'Analyze Mistake'}
+            </button>
+            <button
+                onClick={() => handleDelete(mistake.id)}
+                disabled={analyzingId === mistake.id}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-500 text-white font-bold py-1 px-3 rounded text-xs"
+            >
+                Delete
+            </button>
+        </div>
+    </div>
+  );
+
   return (
     <main className="flex min-h-screen flex-col items-center p-6 md:p-12 bg-gray-900 text-white">
       <div className="w-full max-w-6xl">
@@ -183,11 +222,9 @@ export default function MockDetailPage() {
                                 questionType="Incorrect"
                             />
                             <div className="space-y-4 mt-4">
-                                {mistakes.filter(m => m.section_name === section.name && m.question_type === 'Incorrect').map(mistake => (
-                                    <div key={mistake.id} className="bg-gray-700 p-3 rounded-lg">
-                                      <img src={`${API_URL}/uploads/${mistake.image_path.split(/[\\/]/).pop()}`} alt="Mistake" className="rounded w-full"/>
-                                    </div>
-                                ))}
+                                {mistakes
+                                    .filter(m => m.section_name === section.name && m.question_type === 'Incorrect')
+                                    .map(renderMistakeCard)}
                             </div>
                         </div>
                         {/* Unattempted */}
@@ -200,11 +237,9 @@ export default function MockDetailPage() {
                                 questionType="Unattempted"
                             />
                             <div className="space-y-4 mt-4">
-                                {mistakes.filter(m => m.section_name === section.name && m.question_type === 'Unattempted').map(mistake => (
-                                    <div key={mistake.id} className="bg-gray-700 p-3 rounded-lg">
-                                       <img src={`${API_URL}/uploads/${mistake.image_path.split(/[\\/]/).pop()}`} alt="Mistake" className="rounded w-full"/>
-                                    </div>
-                                ))}
+                                {mistakes
+                                    .filter(m => m.section_name === section.name && m.question_type === 'Unattempted')
+                                    .map(renderMistakeCard)}
                             </div>
                         </div>
                     </div>
