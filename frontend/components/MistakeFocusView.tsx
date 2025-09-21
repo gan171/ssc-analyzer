@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
+
 // --- Type Definitions ---
 interface Mistake {
   id: number;
