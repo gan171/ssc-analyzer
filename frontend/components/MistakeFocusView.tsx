@@ -10,8 +10,8 @@ interface Mistake {
   topic: string;
   sub_topic?: string;
   mistake_type: string;
-  question_image_url: string;
-  explanation: string; // This will hold the AI analysis for now
+  image_path: string; // Using image_path now
+  analysis_text: string; // analysis_text instead of explanation
   notes: string;
 }
 
@@ -65,6 +65,12 @@ export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotes
     }, [onNavigate, onClose]);
 
 
+    const analysis = mistake.analysis_text || "";
+    const coreConcept = analysis.split('Your Mistake:')[0] || 'AI analysis needed.';
+    const yourMistake = analysis.split('Your Mistake:')[1]?.split('Correct Steps:')[0] || 'N/A';
+    const correctSteps = analysis.split('Correct Steps:')[1]?.split('Key Takeaway:')[0] || 'N/A';
+    const keyTakeaway = analysis.split('Key Takeaway:')[1] || 'N/A';
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center animate-fade-in">
             {/* --- Main Grid Layout --- */}
@@ -77,7 +83,7 @@ export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotes
                             <>
                                 <TransformComponent wrapperClass="w-full h-full flex items-center justify-center">
                                     <img
-                                        src={mistake.question_image_url}
+                                        src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`}
                                         alt={`Question ${mistake.question_number}`}
                                         className={`max-w-full max-h-full object-contain ${isInverted ? 'invert' : ''}`}
                                     />
@@ -106,7 +112,7 @@ export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotes
                         {/* 🎯 Core Concept */}
                         <div>
                             <h3 className="font-bold text-lg mb-2 text-indigo-400">🎯 Core Concept</h3>
-                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{mistake.explanation.split('Your Mistake:')[0] || 'AI analysis needed.'}</p>
+                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{coreConcept}</p>
                         </div>
                         
                         {/* 🤔 Your Approach vs. The Correct Approach */}
@@ -115,11 +121,11 @@ export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotes
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-red-900/30 p-3 rounded-md">
                                     <h4 className="font-semibold text-red-400">Your Mistake</h4>
-                                    <p className="text-sm text-gray-300">{mistake.explanation.split('Your Mistake:')[1]?.split('Correct Steps:')[0] || 'N/A'}</p>
+                                    <p className="text-sm text-gray-300">{yourMistake}</p>
                                 </div>
                                 <div className="bg-green-900/30 p-3 rounded-md">
                                     <h4 className="font-semibold text-green-400">Correct Steps</h4>
-                                    <p className="text-sm text-gray-300 whitespace-pre-line">{mistake.explanation.split('Correct Steps:')[1]?.split('Key Takeaway:')[0] || 'N/A'}</p>
+                                    <p className="text-sm text-gray-300 whitespace-pre-line">{correctSteps}</p>
                                 </div>
                             </div>
                         </div>
@@ -127,7 +133,7 @@ export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotes
                         {/* 💡 Key Takeaway */}
                         <div>
                             <h3 className="font-bold text-lg mb-2 text-indigo-400">💡 Key Takeaway</h3>
-                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{mistake.explanation.split('Key Takeaway:')[1] || 'N/A'}</p>
+                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{keyTakeaway}</p>
                         </div>
                         
                         {/* ✍️ Personal Notes */}

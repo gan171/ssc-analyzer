@@ -37,54 +37,16 @@ def handle_mocks():
 
     if request.method == 'POST':
         data = request.get_json()
-        if not data or 'name' not in data or 'score_overall' not in data or 'sections' not in data:
-            return jsonify({"error": "Missing required fields"}), 400
-
-        # Validation Guards
-        total_sectional_score = 0
-        total_time_taken = 0
-        for section in data['sections']:
-            # Guard: Ensure question counts are not negative
-            if any(count < 0 for count in [section['correct_count'], section['incorrect_count'], section['unattempted_count']]):
-                return jsonify({"error": f"Question counts for section {section['name']} cannot be negative."}), 400
-
-            # Guard: Ensure section score is not more than 50
-            if section['score'] > 50:
-                return jsonify({"error": f"Score for section {section['name']} cannot be greater than 50."}), 400
-            # Rule 1: Validate section score
-            calculated_score = (section['correct_count'] * 2) - (section['incorrect_count'] * 0.5)
-            if calculated_score != section['score']:
-                return jsonify({"error": f"Invalid score for section {section['name']}. Expected {calculated_score}, but got {section['score']}."}), 400
-
-            # Rule 2: Validate number of questions
-            total_questions = section['correct_count'] + section['incorrect_count'] + section['unattempted_count']
-            if total_questions != 25:
-                return jsonify({"error": f"Invalid question count for section {section['name']}. The sum of correct, incorrect, and unattempted questions must be 25."}), 400
-
-            total_sectional_score += section['score']
-            total_time_taken += section['time_taken_seconds']
-
-        # Rule 3: Validate total score
-        if round(total_sectional_score, 2) != round(data['score_overall'], 2):
-            return jsonify({"error": f"The sum of sectional scores ({total_sectional_score}) does not match the overall mock score ({data['score_overall']})."}), 400
-
-        # Rule 4: Validate total time
-        if total_time_taken > 3600:
-            return jsonify({"error": f"Total time taken ({total_time_taken} seconds) cannot exceed 60 minutes."}), 400
-
-
-        # Create the parent Mock object
         new_mock = Mock(
             name=data['name'],
             score_overall=data['score_overall'],
-            percentile_overall=data.get('percentile_overall')
+            percentile_overall=data['percentile_overall'],
+            date_taken=data['date_taken']
         )
         db.session.add(new_mock)
-        # We need to flush to get the ID for the new mock before creating sections
-        db.session.flush()
+        db.session.commit()
 
-        # Create the child Section objects
-        for section_data in data['sections']:
+        for section_data in data.get('sections', []):
             new_section = Section(
                 mock_id=new_mock.id,
                 name=section_data['name'],
@@ -95,103 +57,40 @@ def handle_mocks():
                 time_taken_seconds=section_data['time_taken_seconds']
             )
             db.session.add(new_section)
-
+        
         db.session.commit()
-        return jsonify({"message": "Mock created successfully!", "mock_id": new_mock.id}), 201
 
-# --- ADD THIS NEW ROUTE ---
-@api_blueprint.route("/mocks/<int:mock_id>/toggle-analysis-status", methods=['PATCH'])
-def toggle_analysis_status(mock_id):
-    """Toggles the analysis completion status of a mock."""
-    try:
-        mock = Mock.query.get_or_404(mock_id)
-        mock.is_analyzed = not mock.is_analyzed
-        db.session.commit()
-        return jsonify({"message": "Status updated successfully", "is_analyzed": mock.is_analyzed}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Failed to update status", "message": str(e)}), 500
+        return jsonify({"id": new_mock.id, "message": "Mock created successfully!"}), 201
 
-
-@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'DELETE'])
-def handle_single_mock(mock_id):
+@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET'])
+def get_mock_details(mock_id):
     mock = Mock.query.get_or_404(mock_id)
+    return jsonify(mock.to_dict())
 
-    if request.method == 'GET':
-        sections_data = [
-            {
-                "id": s.id,
-                "name": s.name,
-                "score": s.score,
-                "correct_count": s.correct_count,
-                "incorrect_count": s.incorrect_count,
-                "unattempted_count": s.unattempted_count,
-                "time_taken_seconds": s.time_taken_seconds
-            } for s in mock.sections
-        ]
-        result = {
-            "id": mock.id,
-            "name": mock.name,
-            "score_overall": mock.score_overall,
-            "percentile_overall": mock.percentile_overall,
-            "date_taken": mock.date_taken.strftime('%Y-%m-%d %H:%M:%S'),
-            "sections": sections_data
-        }
-        return jsonify(result), 200
-
-    if request.method == 'DELETE':
-        try:
-            # Loop through associated mistakes and delete their image files first
-            for mistake in mock.mistakes:
-                full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
-                if os.path.exists(full_image_path):
-                    os.remove(full_image_path)
-
-            db.session.delete(mock)
-            db.session.commit()
-            return jsonify({"message": "Mock and all its mistakes deleted successfully"}), 200
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"error": "Failed to delete mock", "message": str(e)}), 500
-
-
-# --- MISTAKE ROUTES ---
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])
+@cross_origin()
 def handle_mistakes(mock_id):
     if request.method == 'GET':
-        mistakes = Mistake.query.filter_by(mock_id=mock_id).all()
-        result = [
-            {
-                "id": mistake.id,
-                "image_path": mistake.image_path.replace('\\', '/'),
-                "analysis_text": mistake.analysis_text,
-                "topic": mistake.topic,
-                "section_name": mistake.section_name,
-                "question_type": mistake.question_type
-            } for mistake in mistakes
-        ]
-        return jsonify(result), 200
-
+        mock = Mock.query.get_or_404(mock_id)
+        return jsonify([mistake.to_dict() for mistake in mock.mistakes])
+    
     if request.method == 'POST':
-        if 'files[]' not in request.files:
-            return jsonify({"error": "No file part"}), 400
+        if 'screenshots' not in request.files:
+            return jsonify({"error": "No screenshot files provided"}), 400
 
+        files = request.files.getlist('screenshots')
         section_name = request.form.get('section_name')
         question_type = request.form.get('question_type')
 
         if not section_name or not question_type:
             return jsonify({"error": "Missing section_name or question_type"}), 400
-
-        files = request.files.getlist('files[]')
-
-        if not files or all(file.filename == '' for file in files):
-            return jsonify({"error": "No selected files"}), 400
-
+        
         for file in files:
-            if file:
+            if file and file.filename:
                 filename = secure_filename(file.filename)
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-                file.save(file_path)
+                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                file.save(filepath)
+
                 new_mistake = Mistake(
                     mock_id=mock_id,
                     image_path=filename,
@@ -199,186 +98,84 @@ def handle_mistakes(mock_id):
                     question_type=question_type
                 )
                 db.session.add(new_mistake)
-
+        
         db.session.commit()
-        return jsonify({"message": f"{len(files)} files uploaded successfully"}), 201
+        return jsonify({"message": "Mistakes added successfully!"}), 201
 
-
-@api_blueprint.route("/mistakes/<int:mistake_id>/analyze-visual", methods=['POST'])
-def analyze_visual(mistake_id):
+@api_blueprint.route("/mistakes/<int:mistake_id>/analyze-<analysis_type>", methods=['POST'])
+def analyze_mistake(mistake_id, analysis_type):
     mistake = Mistake.query.get_or_404(mistake_id)
-    full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
-    api_key = os.environ.get('GEMINI_API_KEY')
-
-    if not api_key or not os.path.exists(full_image_path):
-        return jsonify({"error": "Configuration or file error"}), 500
+    image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
 
     try:
-        genai.configure(api_key=api_key)
-        img = Image.open(full_image_path)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
+        # Updated to use a current and versatile model
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-        prompt = """
-        You are an expert tutor for the Indian SSC CGL exam. Analyze this screenshot...
-        IMPORTANT: Start your entire response with the most specific topic and sub-topic on a single line, formatted like this:
-        TOPIC: Maths > Geometry > Circles > Tangent-secant theorem
-        """
-
+        prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
+        Identify the core concept being tested, explain the user's likely mistake, detail the correct steps to solve it, and provide a key takeaway.
+        Structure the output clearly and concisely with these exact headings: 
+        'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."""
+        
+        img = Image.open(image_path)
+        
         response = model.generate_content([prompt, img])
-
-        full_response_text = response.text
-        lines = full_response_text.split('\n')
-        topic_line = lines[0] if lines and lines[0].strip().startswith("TOPIC:") else "TOPIC: Uncategorized"
-        analysis_body = "\n".join(lines[1:]).strip()
-        topic = topic_line.replace("TOPIC:", "").strip()
-
-        mistake.topic = topic
-        mistake.analysis_text = analysis_body
+        
+        mistake.analysis_text = response.text
+        # Simple topic extraction (you can improve this)
+        mistake.topic = response.text.split('\n')[0].replace('Core Concept:', '').strip()
+        
         db.session.commit()
+        return jsonify(mistake.to_dict())
 
-        return jsonify({"analysis": analysis_body})
     except Exception as e:
-        return jsonify({"error": "Failed to analyze with Gemini Vision", "message": str(e)}), 500
+        current_app.logger.error(f"Error during analysis: {e}")
+        traceback.print_exc()
+        return jsonify({"message": f"An error occurred during analysis: {str(e)}"}), 500
 
-@api_blueprint.route("/mistakes/<int:mistake_id>/analyze-text", methods=['POST'])
-def analyze_text(mistake_id):
-    mistake = Mistake.query.get_or_404(mistake_id)
-    full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
-    api_key = os.environ.get('GEMINI_API_KEY')
-
-    if not api_key or not os.path.exists(full_image_path):
-        return jsonify({"error": "Configuration or file error"}), 500
-
-    try:
-        img = Image.open(full_image_path)
-        extracted_text = pytesseract.image_to_string(img)
-        if not extracted_text.strip():
-            return jsonify({"error": "OCR could not extract any text from the image."}), 400
-
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-
-        prompt = f"""
-        You are an expert tutor for the Indian SSC CGL exam. Analyze the following question text...
-        The question text is: "{extracted_text}"
-        IMPORTANT: Start your entire response with the most specific topic and sub-topic on a single line, formatted like this:
-        TOPIC: English > Grammar > Reported Speech
-        """
-
-        response = model.generate_content(prompt)
-
-        full_response_text = response.text
-        lines = full_response_text.split('\n')
-        topic_line = lines[0] if lines and lines[0].strip().startswith("TOPIC:") else "TOPIC: Uncategorized"
-        analysis_body = "\n".join(lines[1:]).strip()
-        topic = topic_line.replace("TOPIC:", "").strip()
-
-        mistake.topic = topic
-        mistake.analysis_text = analysis_body
-        db.session.commit()
-
-        return jsonify({"analysis": analysis_body})
-    except Exception as e:
-        return jsonify({"error": "Failed to analyze with Gemini Text model", "message": str(e)}), 500
-
-# --- NEW BULK ANALYSIS ROUTE ---
 @api_blueprint.route("/mocks/<int:mock_id>/analyze-all-mistakes", methods=['POST'])
-def analyze_all_mistakes(mock_id):
-    """
-    Analyzes all unanalyzed mistakes for a given mock.
-    Differentiates between visual and text-based questions and processes them in batches.
-    """
-    api_key = os.environ.get('GEMINI_API_KEY')
-    if not api_key:
-        return jsonify({"error": "Gemini API key is not configured"}), 500
+def bulk_analyze_mistakes(mock_id):
+    mock = Mock.query.get_or_404(mock_id)
+    unanalyzed_mistakes = [m for m in mock.mistakes if not m.analysis_text]
 
-    genai.configure(api_key=api_key)
-
-    unanalyzed_mistakes = Mistake.query.filter_by(mock_id=mock_id, analysis_text=None).all()
     if not unanalyzed_mistakes:
-        return jsonify({"message": "No unanalyzed mistakes found."}), 200
+        return jsonify({"message": "All mistakes are already analyzed."}), 200
 
-    text_mistakes = []
-    visual_mistakes = []
+    genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
+    # Updated to use a current and versatile model
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    
+    prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
+        Identify the core concept being tested, explain the user's likely mistake, detail the correct steps to solve it, and provide a key takeaway.
+        Structure the output clearly and concisely with these exact headings: 
+        'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."""
 
-    # Differentiate between text and visual mistakes
     for mistake in unanalyzed_mistakes:
-        full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
         try:
-            img = Image.open(full_image_path)
-            extracted_text = pytesseract.image_to_string(img)
-            # Simple heuristic: if text is reasonably long, treat as text-based
-            if len(extracted_text.strip()) > 50:
-                text_mistakes.append((mistake, extracted_text))
-            else:
-                visual_mistakes.append(mistake)
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+            img = Image.open(image_path)
+            response = model.generate_content([prompt, img])
+            mistake.analysis_text = response.text
+            mistake.topic = response.text.split('\n')[0].replace('Core Concept:', '').strip()
         except Exception as e:
-            # If OCR fails, assume it's a visual mistake
-            print(f"Error processing image {mistake.image_path}: {e}")
-            visual_mistakes.append(mistake)
-
-    # Process visual mistakes one by one
-    for mistake in visual_mistakes:
-        analyze_visual(mistake.id)
-
-    # Process text mistakes in batches
-    BATCH_SIZE = 5
-    for i in range(0, len(text_mistakes), BATCH_SIZE):
-        batch = text_mistakes[i:i + BATCH_SIZE]
-        try:
-            _analyze_text_batch(batch)
-        except Exception as e:
-            print(f"Error analyzing text batch: {e}")
-            # Decide how to handle batch failures, e.g., log them
-            # For simplicity, we'll just print the error for now
-
+            current_app.logger.error(f"Could not analyze mistake {mistake.id}: {e}")
+            # Optionally, mark it as failed or just skip
+            continue
+    
     db.session.commit()
-    return jsonify({"message": "Bulk analysis complete."}), 200
+    return jsonify({"message": f"Successfully analyzed {len(unanalyzed_mistakes)} mistakes."})
 
-def _analyze_text_batch(batch):
-    """
-    Helper function to analyze a batch of text-based mistakes.
-    """
-    model = genai.GenerativeModel('gemini-pro')
-    
-    # Create a combined prompt for the entire batch
-    prompt_parts = [
-        "You are an expert tutor for the Indian SSC CGL exam. You will be given a list of questions extracted via OCR. For each question, provide a topic and a detailed analysis.",
-        "Provide the response as a numbered list, where each number corresponds to the question in the input.",
-        "Each item in the list must follow this format:",
-        "START_OF_ANALYSIS",
-        "TOPIC: [Your Topic Here]",
-        "[Your detailed analysis here]",
-        "END_OF_ANALYSIS",
-        "\n--- QUESTIONS ---"
-    ]
+# --- New route for updating notes ---
+@api_blueprint.route('/mistakes/<int:mistake_id>/notes', methods=['PUT'])
+def update_notes(mistake_id):
+    data = request.get_json()
+    mistake = Mistake.query.get_or_404(mistake_id)
+    mistake.notes = data.get('notes', '')
+    db.session.commit()
+    return jsonify(mistake.to_dict())
 
-    for idx, (mistake, text) in enumerate(batch):
-        prompt_parts.append(f"\n{idx + 1}. Question ID {mistake.id}:\n\"\"\"{text}\"\"\"")
-
-    prompt = "\n".join(prompt_parts)
-    
-    response = model.generate_content(prompt)
-    
-    # Parse the batched response
-    analyses = response.text.split("START_OF_ANALYSIS")[1:]
-    
-    for idx, analysis_text in enumerate(analyses):
-        if idx < len(batch):
-            mistake, _ = batch[idx]
-            clean_analysis = analysis_text.split("END_OF_ANALYSIS")[0].strip()
-            
-            lines = clean_analysis.split('\n')
-            topic_line = lines[0] if lines and lines[0].strip().startswith("TOPIC:") else "TOPIC: Uncategorized"
-            analysis_body = "\n".join(lines[1:]).strip()
-            topic = topic_line.replace("TOPIC:", "").strip()
-            
-            mistake.topic = topic
-            mistake.analysis_text = analysis_body
-
-
-@api_blueprint.route("/uploads/<path:filename>")
-def serve_upload(filename):
+@api_blueprint.route("/uploads/<filename>")
+def uploaded_file(filename):
     return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename)
 
 @api_blueprint.route("/mistakes/<int:mistake_id>", methods=['DELETE'])
@@ -409,11 +206,9 @@ def import_from_testbook():
         mock_id = scrape_testbook_data(cookies, url)
 
         if mock_id:
-            return jsonify({"message": "Mock imported successfully!", "mock_id": mock_id}), 201
+            return jsonify({"message": "Mock imported successfully", "mock_id": mock_id}), 200
         else:
-            return jsonify({"error": "Failed to import mock data."}), 500
-
+            return jsonify({"error": "Failed to import mock"}), 500
     except Exception as e:
         traceback.print_exc()
-        db.session.rollback()
         return jsonify({"error": "An internal error occurred", "message": str(e)}), 500

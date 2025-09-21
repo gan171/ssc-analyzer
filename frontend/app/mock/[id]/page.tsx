@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import ScreenshotUploader from '../../../components/ScreenshotUploader';
 import MistakeFocusView from '@/components/MistakeFocusView';
 
-// Define the types for our data structures
+// ... (interface definitions remain the same)
 interface Section {
   id: number;
   name: string;
@@ -31,7 +31,9 @@ interface Mistake {
   topic: string | null;
   section_name: string;
   question_type: string;
+  notes: string; // Added notes field
 }
+
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -47,6 +49,9 @@ const MockDetailPage = () => {
   const [selectedSection, setSelectedSection] = useState('');
   const [selectedQuestionType, setSelectedQuestionType] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedMistake, setSelectedMistake] = useState<Mistake | null>(null);
+  const [selectedMistakeIndex, setSelectedMistakeIndex] = useState(0);
+
 
   const fetchMistakes = useCallback(async () => {
     if (!id) return;
@@ -132,6 +137,41 @@ const MockDetailPage = () => {
     }
   };
 
+  const openFocusView = (mistake: Mistake, index: number) => {
+    setSelectedMistake(mistake);
+    setSelectedMistakeIndex(index);
+  }
+
+  const closeFocusView = () => {
+    setSelectedMistake(null);
+  }
+
+  const navigateMistake = (direction: 'next' | 'prev') => {
+    const newIndex = direction === 'next' ? selectedMistakeIndex + 1 : selectedMistakeIndex - 1;
+    if (newIndex >= 0 && newIndex < mistakes.length) {
+      setSelectedMistake(mistakes[newIndex]);
+      setSelectedMistakeIndex(newIndex);
+    }
+  }
+
+  const handleNotesUpdate = async (mistakeId: number, newNotes: string) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/notes`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: newNotes }),
+        });
+        if (!res.ok) throw new Error('Failed to update notes');
+        // Optimistically update local state
+        const updatedMistakes = mistakes.map(m =>
+            m.id === mistakeId ? { ...m, notes: newNotes } : m
+        );
+        setMistakes(updatedMistakes);
+    } catch (err: any) {
+        alert(`Error: ${err.message}`);
+    }
+};
+
   if (isLoading) return <div className="text-center mt-8">Loading...</div>;
   if (error) return <div className="text-center mt-8 text-red-500">Error: {error}</div>;
   if (!mock) return <div className="text-center mt-8">Mock not found.</div>;
@@ -140,6 +180,16 @@ const MockDetailPage = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-8">
+        {selectedMistake && (
+            <MistakeFocusView
+                mistake={selectedMistake}
+                onClose={closeFocusView}
+                onNavigate={navigateMistake}
+                onNotesUpdate={handleNotesUpdate}
+            />
+        )}
+      {/* ... (Existing JSX for mock details and sections) ... */}
+      
       <div className="bg-gray-800 shadow-xl rounded-lg p-6 mb-8 text-white">
         <h1 className="text-4xl font-bold mb-2">{mock.name}</h1>
         <p className="text-gray-400 text-lg mb-4">Taken on: {new Date(mock.date_taken).toLocaleDateString()}</p>
@@ -169,7 +219,6 @@ const MockDetailPage = () => {
           ))}
         </div>
       </div>
-
       <div>
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-3xl font-bold text-gray-200">Mistakes</h2>
@@ -234,8 +283,8 @@ const MockDetailPage = () => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mistakes.map((mistake) => (
-            <div key={mistake.id} className="bg-gray-800 shadow-lg rounded-lg overflow-hidden">
+          {mistakes.map((mistake, index) => (
+            <div key={mistake.id} className="bg-gray-800 shadow-lg rounded-lg overflow-hidden cursor-pointer" onClick={() => openFocusView(mistake, index)}>
               <img src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>
               <div className="p-4">
                 <p className="text-sm text-gray-400 mb-2">Section: {mistake.section_name} ({mistake.question_type})</p>
@@ -246,11 +295,11 @@ const MockDetailPage = () => {
                   </div>
                 ) : (
                   <div className="flex space-x-2 mt-2">
-                    <button onClick={() => handleAnalyzeClick(mistake.id, 'visual')} className="text-sm bg-green-600 text-white font-semibold py-1 px-3 rounded hover:bg-green-700">Analyze (Visual)</button>
-                    <button onClick={() => handleAnalyzeClick(mistake.id, 'text')} className="text-sm bg-yellow-600 text-white font-semibold py-1 px-3 rounded hover:bg-yellow-700">Analyze (Text)</button>
+                    <button onClick={(e) => { e.stopPropagation(); handleAnalyzeClick(mistake.id, 'visual')}} className="text-sm bg-green-600 text-white font-semibold py-1 px-3 rounded hover:bg-green-700">Analyze (Visual)</button>
+                    <button onClick={(e) => {e.stopPropagation(); handleAnalyzeClick(mistake.id, 'text')}} className="text-sm bg-yellow-600 text-white font-semibold py-1 px-3 rounded hover:bg-yellow-700">Analyze (Text)</button>
                   </div>
                 )}
-                 <button onClick={() => handleDeleteMistake(mistake.id)} className="text-xs text-red-400 hover:text-red-500 mt-4">Delete</button>
+                 <button onClick={(e) => { e.stopPropagation(); handleDeleteMistake(mistake.id)}} className="text-xs text-red-400 hover:text-red-500 mt-4">Delete</button>
               </div>
             </div>
           ))}
