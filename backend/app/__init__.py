@@ -11,6 +11,7 @@ def create_app(config_class=Config):
     app = Flask(__name__, static_folder='../uploads', static_url_path='/uploads')
     
     app.config.from_object(config_class)
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
     # This line is also important for allowing cross-origin requests to your uploads folder
     CORS(app, resources={

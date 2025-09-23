@@ -43,7 +43,7 @@ const DashboardPage = () => {
       if (!res.ok) throw new Error('Failed to fetch mocks');
       const data = await res.json();
       setMocks(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message);
     } finally {
       setIsLoading(false);

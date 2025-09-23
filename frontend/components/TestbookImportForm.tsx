@@ -35,7 +35,7 @@ export default function TestbookImportForm({ onMockImported }: TestbookImportFor
       setCookies('');
       setUrl('');
       onMockImported();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error importing mock:', error);
       setError(error.message);
     } finally {

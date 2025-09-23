@@ -12,6 +12,10 @@ from app.models.section import Section
 from app.api.testbook_scraper import scrape_testbook_data
 import traceback
 from flask import current_app
+from datetime import date
+from app.models.api_call_counter import ApiCallCounter
+from app.api.helpers import increment_api_call_counter
+import re
 
 api_blueprint = Blueprint('api', __name__)
 
@@ -108,6 +112,7 @@ def analyze_mistake(mistake_id, analysis_type):
     image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
 
     try:
+        increment_api_call_counter()
         genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
         # Updated to use a current and versatile model
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
@@ -142,28 +147,82 @@ def bulk_analyze_mistakes(mock_id):
         return jsonify({"message": "All mistakes are already analyzed."}), 200
 
     genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-    # Updated to use a current and versatile model
     model = genai.GenerativeModel('gemini-1.5-flash-latest')
-    
-    prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
+
+    text_based_mistakes = []
+    image_based_mistakes = []
+
+    # --- Step 1: Segregate mistakes using OCR ---
+    for mistake in unanalyzed_mistakes:
+        try:
+            increment_api_call_counter()
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+            img = Image.open(image_path)
+            # Use pytesseract to extract text
+            extracted_text = pytesseract.image_to_string(img)
+            
+            # Simple heuristic: if we get more than 20 words, it's likely a text question
+            if len(extracted_text.split()) > 20:
+                text_based_mistakes.append({'mistake_obj': mistake, 'text': extracted_text})
+            else:
+                image_based_mistakes.append(mistake)
+        except Exception as e:
+            current_app.logger.error(f"OCR failed for mistake {mistake.id}: {e}")
+            image_based_mistakes.append(mistake) # Treat as image if OCR fails
+
+    analyzed_count = 0
+
+    # --- Step 2: Batch process text-based mistakes ---
+    if text_based_mistakes:
+        # Create one large prompt with all text questions
+        # We assign a unique ID to each question for easy parsing later
+        batched_prompt_text = "Analyze the following questions. For each question, provide the Core Concept, Your Mistake, Correct Steps, and Key Takeaway.\n\n"
+        for i, item in enumerate(text_based_mistakes):
+            batched_prompt_text += f"--- QUESTION {i+1} ---\n{item['text']}\n\n"
+        
+        batched_prompt_text += "Provide the analysis for each question under the heading '--- ANALYSIS FOR QUESTION X ---'."
+
+        try:
+            response = model.generate_content(batched_prompt_text)
+            
+            # --- Step 3: Parse the batched response ---
+            # Use regex to split the response for each question
+            analyses = re.split(r'--- ANALYSIS FOR QUESTION \d+ ---', response.text)
+            
+            # The first item is usually empty, so we skip it
+            for i, analysis_text in enumerate(analyses[1:]):
+                if i < len(text_based_mistakes):
+                    mistake_item = text_based_mistakes[i]
+                    mistake = mistake_item['mistake_obj']
+                    mistake.analysis_text = analysis_text.strip()
+                    mistake.topic = analysis_text.strip().split('\n')[0].replace('Core Concept:', '').strip()
+                    analyzed_count += 1
+
+        except Exception as e:
+            current_app.logger.error(f"Bulk text analysis failed: {e}")
+
+    # --- Step 4: Process image-based mistakes individually (the old way) ---
+    image_prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
         Identify the core concept being tested, explain the user's likely mistake, detail the correct steps to solve it, and provide a key takeaway.
         Structure the output clearly and concisely with these exact headings: 
         'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."""
-
-    for mistake in unanalyzed_mistakes:
+        
+    for mistake in image_based_mistakes:
         try:
+            increment_api_call_counter()
             image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
             img = Image.open(image_path)
-            response = model.generate_content([prompt, img])
+            response = model.generate_content([image_prompt, img])
             mistake.analysis_text = response.text
             mistake.topic = response.text.split('\n')[0].replace('Core Concept:', '').strip()
+            analyzed_count += 1
         except Exception as e:
-            current_app.logger.error(f"Could not analyze mistake {mistake.id}: {e}")
-            # Optionally, mark it as failed or just skip
+            current_app.logger.error(f"Could not analyze image mistake {mistake.id}: {e}")
             continue
     
     db.session.commit()
-    return jsonify({"message": f"Successfully analyzed {len(unanalyzed_mistakes)} mistakes."})
+    return jsonify({"message": f"Successfully analyzed {analyzed_count} out of {len(unanalyzed_mistakes)} mistakes."})
+
 
 # --- New route for updating notes ---
 @api_blueprint.route('/mistakes/<int:mistake_id>/notes', methods=['PUT'])
@@ -212,3 +271,18 @@ def import_from_testbook():
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": "An internal error occurred", "message": str(e)}), 500
+
+@api_blueprint.route("/analytics/today-api-calls", methods=['GET'])
+@cross_origin()
+def get_today_api_calls():
+    """
+    Returns the number of API calls made today.
+    """
+    today = date.today()
+    counter = ApiCallCounter.query.filter_by(date=today).first()
+    
+    if counter:
+        return jsonify({"count": counter.count})
+    else:
+        # If no calls have been made today, return 0
+        return jsonify({"count": 0})

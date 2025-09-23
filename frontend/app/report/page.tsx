@@ -154,7 +154,7 @@ const PerformanceReportPage = () => {
         if (!res.ok) throw new Error('Failed to fetch performance data');
         const data = await res.json();
         setReportData(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         setError(err.message);
       } finally {
         setIsLoading(false);

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import ScreenshotUploader from '../../../components/ScreenshotUploader';
 import MistakeFocusView from '@/components/MistakeFocusView';
+import Image from 'next/image';
 
 // ... (interface definitions remain the same)
 interface Section {
@@ -75,7 +76,7 @@ const MockDetailPage = () => {
         const data = await res.json();
         setMock(data);
         await fetchMistakes();
-      } catch (err: any) {
+      } catch (err: unknown) {
         setError(err.message);
       } finally {
         setIsLoading(false);
@@ -99,7 +100,7 @@ const MockDetailPage = () => {
         throw new Error(errorData.message || 'Analysis failed');
       }
       fetchMistakes();
-    } catch (err: any) {
+    } catch (err: unknown) {
       alert(`Error: ${err.message}`);
     }
   };
@@ -112,7 +113,7 @@ const MockDetailPage = () => {
         });
         if (!res.ok) throw new Error('Failed to delete mistake');
         fetchMistakes();
-      } catch (err: any) {
+      } catch (err: unknown) {
         alert(`Error: ${err.message}`);
       }
     }
@@ -130,7 +131,7 @@ const MockDetailPage = () => {
       }
       alert('Bulk analysis complete!');
       fetchMistakes();
-    } catch (err: any) {
+    } catch (err:unknown) {
       alert(`Error: ${err.message}`);
     } finally {
       setIsAnalyzing(false);
@@ -167,7 +168,7 @@ const MockDetailPage = () => {
             m.id === mistakeId ? { ...m, notes: newNotes } : m
         );
         setMistakes(updatedMistakes);
-    } catch (err: any) {
+    } catch (err: unknown) {
         alert(`Error: ${err.message}`);
     }
 };

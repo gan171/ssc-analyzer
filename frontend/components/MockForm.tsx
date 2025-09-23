@@ -81,7 +81,7 @@ export default function MockForm({ onMockAdded }: MockFormProps) {
       setSections(initialSections);
       onMockAdded(); // This refreshes the mock list on the homepage
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error submitting mock data:', error);
       setError(error.message);
     }

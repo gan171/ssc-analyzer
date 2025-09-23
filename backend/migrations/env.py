@@ -5,6 +5,13 @@ from flask import current_app
 
 from alembic import context
 
+# --- ADD THESE LINES ---
+from app.models.mock import Mock
+from app.models.section import Section
+from app.models.mistake import Mistake
+# Import your new model here
+from app.models.api_call_counter import ApiCallCounter
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
