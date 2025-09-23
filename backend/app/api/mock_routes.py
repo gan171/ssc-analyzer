@@ -19,6 +19,54 @@ import re
 
 api_blueprint = Blueprint('api', __name__)
 
+# --- NEW: DYNAMIC PROMPT GENERATION HELPER ---
+def get_dynamic_prompt(section_name, user_mistake_description):
+    """
+    Generates a dynamic "MentorAI" prompt based on the section and user's mistake description.
+    """
+    persona = "You are 'MentorAI', a specialized AI assistant for competitive exam aspirants. Your tone must be encouraging, insightful, and supportive. Your goal is not just to provide solutions but to empower the user to learn from their errors and improve their strategy."
+
+    user_input_section = f"The user has identified their mistake as: '{user_mistake_description}'." if user_mistake_description and user_mistake_description.strip() else "The user did not specify their mistake."
+
+    # Subject-specific instructions
+    if 'quantitative' in section_name.lower() or 'math' in section_name.lower():
+        subject_instructions = """
+        Your response MUST be structured with these exact headings:
+        1.  **Initial Analysis**: Start by acknowledging the question and the user's analysis. State the topic (e.g., Profit and Loss).
+        2.  **💡 The Smart Method**: Provide a clear, step-by-step solution. Explain why it's the most efficient method for a competitive exam.
+        3.  **⚡️ Shortcut Arsenal**: Suggest alternative time-saving methods like Option Elimination, Unit Digit/Digital Sum, or Approximation. Explain when to use them.
+        4.  **🎯 Key Takeaway**: End with a concise, one-liner conclusion.
+        """
+    elif 'english' in section_name.lower():
+        subject_instructions = """
+        Your response MUST be structured with these exact headings:
+        1.  **Initial Analysis**: Acknowledge the question and the user's mistake. Identify the question type (e.g., Sentence Improvement, Vocabulary).
+        2.  **✅ The Correct Approach**: Provide the correct answer and a detailed explanation, incorporating the user's point of view if they provided one.
+        3.  **📖 Concept Spotlight**: Explain the underlying grammar rule, provide vocabulary meanings with synonyms/antonyms, or explain the idiom with examples.
+        4.  **🤔 Analyzing the Other Options**: Explain why the other options are incorrect to provide a holistic understanding.
+        """
+    elif 'reasoning' in section_name.lower():
+        subject_instructions = """
+        Your response MUST be structured with these exact headings:
+        1.  **Initial Analysis**: Acknowledge the problem and user's mistake. Categorize the reasoning type (e.g., Blood Relation, Syllogism).
+        2.  **➡️ The Logical Flow**: Provide a step-by-step breakdown of the thought process required to reach the solution. Use diagrams in text if helpful.
+        3.  **⏱️ Boost Your Speed**: Offer strategic advice (e.g., "For these questions, drawing a quick diagram is fastest...").
+        4.  **🎯 Key Takeaway**: Conclude with a memorable one-liner strategy tip.
+        """
+    elif 'general' in section_name.lower():
+        subject_instructions = """
+        Your response MUST be structured with these exact headings:
+        1.  **📌 The Right Answer & Why**: Provide the correct answer and a comprehensive but brief explanation.
+        2.  **🔗 Connect the Dots**: This is crucial. Provide additional, related information and mention other probable questions from this topic.
+        3.  **🔍 Learning from the Options**: Explain what the other (incorrect) options refer to, turning one question into four learning opportunities.
+        """
+    else:
+        # A default fallback prompt that is still high quality
+        subject_instructions = "Your response MUST be structured with these exact headings: 'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."
+
+    return f"{persona}\n\nAnalyze the attached screenshot of a question the user answered incorrectly. {user_input_section}\n\nFollow these instructions precisely:\n{subject_instructions}"
+
+
 @api_blueprint.route("/health")
 def health_check():
     return jsonify({"status": "ok", "message": "Backend is running!"})
@@ -28,15 +76,7 @@ def health_check():
 def handle_mocks():
     if request.method == 'GET':
         all_mocks = Mock.query.order_by(Mock.date_taken.desc()).all()
-        result = [
-            {
-                "id": mock.id,
-                "name": mock.name,
-                "score_overall": mock.score_overall,
-                "percentile_overall": mock.percentile_overall,
-                "date_taken": mock.date_taken.strftime('%Y-%m-%d %H:%M:%S')
-            } for mock in all_mocks
-        ]
+        result = [mock.to_dict() for mock in all_mocks]
         return jsonify(result), 200
 
     if request.method == 'POST':
@@ -85,6 +125,8 @@ def handle_mistakes(mock_id):
         files = request.files.getlist('screenshots')
         section_name = request.form.get('section_name')
         question_type = request.form.get('question_type')
+        # NEW: Get the user's mistake description from the form
+        mistake_description = request.form.get('mistake_description', '')
 
         if not section_name or not question_type:
             return jsonify({"error": "Missing section_name or question_type"}), 400
@@ -99,132 +141,109 @@ def handle_mistakes(mock_id):
                     mock_id=mock_id,
                     image_path=filename,
                     section_name=section_name,
-                    question_type=question_type
+                    question_type=question_type,
+                    # NEW: Save the user's description to the 'notes' field in the database
+                    notes=mistake_description 
                 )
                 db.session.add(new_mistake)
         
         db.session.commit()
         return jsonify({"message": "Mistakes added successfully!"}), 201
 
-@api_blueprint.route("/mistakes/<int:mistake_id>/analyze-<analysis_type>", methods=['POST'])
-def analyze_mistake(mistake_id, analysis_type):
+@api_blueprint.route("/mistakes/<int:mistake_id>/analyze-text", methods=['POST'])
+def analyze_mistake(mistake_id): # Renamed for clarity, though not strictly required
     mistake = Mistake.query.get_or_404(mistake_id)
     image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
 
     try:
         increment_api_call_counter()
         genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-        # Updated to use a current and versatile model
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-        prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
-        Identify the core concept being tested, explain the user's likely mistake, detail the correct steps to solve it, and provide a key takeaway.
-        Structure the output clearly and concisely with these exact headings: 
-        'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."""
+        # CHANGED: Use the dynamic prompt function with data from the DB
+        prompt = get_dynamic_prompt(mistake.section_name, mistake.notes)
         
         img = Image.open(image_path)
         
         response = model.generate_content([prompt, img])
         
         mistake.analysis_text = response.text
-        # Simple topic extraction (you can improve this)
-        mistake.topic = response.text.split('\n')[0].replace('Core Concept:', '').strip()
+        # CHANGED: More robust topic extraction
+        try:
+            # Split by lines, find the first one with content after a colon, and take that.
+            lines = response.text.split('\n')
+            topic_line = next((line for line in lines if ':' in line), None)
+            if topic_line:
+                mistake.topic = topic_line.split(':', 1)[1].strip()
+            else:
+                mistake.topic = "General"
+        except Exception:
+            mistake.topic = "General" # Fallback
         
         db.session.commit()
         return jsonify(mistake.to_dict())
 
     except Exception as e:
-        current_app.logger.error(f"Error during analysis: {e}")
+        current_app.logger.error(f"Error during analysis for mistake {mistake_id}: {e}")
         traceback.print_exc()
         return jsonify({"message": f"An error occurred during analysis: {str(e)}"}), 500
 
+# CHANGED: Rewritten for simplicity and to support dynamic prompts
 @api_blueprint.route("/mocks/<int:mock_id>/analyze-all-mistakes", methods=['POST'])
 def bulk_analyze_mistakes(mock_id):
     mock = Mock.query.get_or_404(mock_id)
     unanalyzed_mistakes = [m for m in mock.mistakes if not m.analysis_text]
 
     if not unanalyzed_mistakes:
-        return jsonify({"message": "All mistakes are already analyzed."}), 200
+        mock.is_analyzed = True # Mark the mock as fully analyzed
+        db.session.commit()
+        return jsonify({"message": "All mistakes were already analyzed."}), 200
 
     genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
     model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    
+    analyzed_count = 0
+    errors = []
 
-    text_based_mistakes = []
-    image_based_mistakes = []
-
-    # --- Step 1: Segregate mistakes using OCR ---
     for mistake in unanalyzed_mistakes:
         try:
             increment_api_call_counter()
             image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+            
+            # Use the dynamic prompt for each mistake
+            prompt = get_dynamic_prompt(mistake.section_name, mistake.notes)
+            
             img = Image.open(image_path)
-            # Use pytesseract to extract text
-            extracted_text = pytesseract.image_to_string(img)
+            response = model.generate_content([prompt, img])
             
-            # Simple heuristic: if we get more than 20 words, it's likely a text question
-            if len(extracted_text.split()) > 20:
-                text_based_mistakes.append({'mistake_obj': mistake, 'text': extracted_text})
-            else:
-                image_based_mistakes.append(mistake)
-        except Exception as e:
-            current_app.logger.error(f"OCR failed for mistake {mistake.id}: {e}")
-            image_based_mistakes.append(mistake) # Treat as image if OCR fails
-
-    analyzed_count = 0
-
-    # --- Step 2: Batch process text-based mistakes ---
-    if text_based_mistakes:
-        # Create one large prompt with all text questions
-        # We assign a unique ID to each question for easy parsing later
-        batched_prompt_text = "Analyze the following questions. For each question, provide the Core Concept, Your Mistake, Correct Steps, and Key Takeaway.\n\n"
-        for i, item in enumerate(text_based_mistakes):
-            batched_prompt_text += f"--- QUESTION {i+1} ---\n{item['text']}\n\n"
-        
-        batched_prompt_text += "Provide the analysis for each question under the heading '--- ANALYSIS FOR QUESTION X ---'."
-
-        try:
-            response = model.generate_content(batched_prompt_text)
-            
-            # --- Step 3: Parse the batched response ---
-            # Use regex to split the response for each question
-            analyses = re.split(r'--- ANALYSIS FOR QUESTION \d+ ---', response.text)
-            
-            # The first item is usually empty, so we skip it
-            for i, analysis_text in enumerate(analyses[1:]):
-                if i < len(text_based_mistakes):
-                    mistake_item = text_based_mistakes[i]
-                    mistake = mistake_item['mistake_obj']
-                    mistake.analysis_text = analysis_text.strip()
-                    mistake.topic = analysis_text.strip().split('\n')[0].replace('Core Concept:', '').strip()
-                    analyzed_count += 1
-
-        except Exception as e:
-            current_app.logger.error(f"Bulk text analysis failed: {e}")
-
-    # --- Step 4: Process image-based mistakes individually (the old way) ---
-    image_prompt = """Analyze the attached screenshot of a multiple-choice question the user answered incorrectly. 
-        Identify the core concept being tested, explain the user's likely mistake, detail the correct steps to solve it, and provide a key takeaway.
-        Structure the output clearly and concisely with these exact headings: 
-        'Core Concept:', 'Your Mistake:', 'Correct Steps:', and 'Key Takeaway:'."""
-        
-    for mistake in image_based_mistakes:
-        try:
-            increment_api_call_counter()
-            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
-            img = Image.open(image_path)
-            response = model.generate_content([image_prompt, img])
             mistake.analysis_text = response.text
-            mistake.topic = response.text.split('\n')[0].replace('Core Concept:', '').strip()
+            # Use the same robust topic extraction
+            try:
+                lines = response.text.split('\n')
+                topic_line = next((line for line in lines if ':' in line), None)
+                if topic_line:
+                    mistake.topic = topic_line.split(':', 1)[1].strip()
+                else:
+                    mistake.topic = "General"
+            except Exception:
+                mistake.topic = "General"
+
             analyzed_count += 1
         except Exception as e:
-            current_app.logger.error(f"Could not analyze image mistake {mistake.id}: {e}")
-            continue
+            error_message = f"Could not analyze mistake {mistake.id}: {e}"
+            current_app.logger.error(error_message)
+            errors.append(error_message)
+            continue # Continue to the next mistake
     
+    mock.is_analyzed = True # Mark as analyzed even if some fail
     db.session.commit()
-    return jsonify({"message": f"Successfully analyzed {analyzed_count} out of {len(unanalyzed_mistakes)} mistakes."})
 
+    if errors:
+         return jsonify({"message": f"Successfully analyzed {analyzed_count} out of {len(unanalyzed_mistakes)} mistakes. Some errors occurred."}), 207 # Multi-Status
+    
+    return jsonify({"message": f"Successfully analyzed all {analyzed_count} remaining mistakes."})
 
-# --- New route for updating notes ---
+# --- Other routes remain the same ---
 @api_blueprint.route('/mistakes/<int:mistake_id>/notes', methods=['PUT'])
 def update_notes(mistake_id):
     data = request.get_json()
@@ -275,14 +294,6 @@ def import_from_testbook():
 @api_blueprint.route("/analytics/today-api-calls", methods=['GET'])
 @cross_origin()
 def get_today_api_calls():
-    """
-    Returns the number of API calls made today.
-    """
     today = date.today()
     counter = ApiCallCounter.query.filter_by(date=today).first()
-    
-    if counter:
-        return jsonify({"count": counter.count})
-    else:
-        # If no calls have been made today, return 0
-        return jsonify({"count": 0})
+    return jsonify({"count": counter.count if counter else 0})

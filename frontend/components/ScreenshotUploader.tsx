@@ -1,10 +1,9 @@
-// frontend/components/ScreenshotUploader.tsx
-
 "use client";
 
 import { useState, useRef } from "react";
 import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+// REMOVED: The problematic CSS import is no longer here.
+// It has been moved to the main layout file.
 
 interface ScreenshotUploaderProps {
   mockId: number;
@@ -25,7 +24,9 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
   const [sectionName, setSectionName] = useState("Reasoning");
   const [questionType, setQuestionType] = useState("incorrect");
   
-  // --- NEW STATE FOR LOADING/ANALYSIS ---
+  // NEW: State to hold the user's description of their mistake
+  const [mistakeDescription, setMistakeDescription] = useState('');
+  
   const [isUploading, setIsUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
@@ -44,7 +45,6 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
       return;
     }
 
-    // --- START UPLOAD LOADING STATE ---
     setIsUploading(true);
     toast.info("Uploading screenshots...");
 
@@ -54,6 +54,9 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
     });
     formData.append("section_name", sectionName);
     formData.append("question_type", questionType);
+    
+    // NEW: Add the user's mistake description to the form data
+    formData.append("mistake_description", mistakeDescription);
 
     try {
       const response = await fetch(
@@ -71,6 +74,7 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
       toast.success("Screenshots uploaded successfully!");
       onUploadComplete(); // Refresh the mistakes list
       setFiles([]); // Clear the file input
+      setMistakeDescription(''); // NEW: Clear the description field
       if(fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -78,14 +82,11 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
       console.error("Upload error:", error);
       toast.error("An error occurred during upload.");
     } finally {
-      // --- END UPLOAD LOADING STATE ---
       setIsUploading(false);
     }
   };
   
-  // --- NEW FUNCTION FOR BULK ANALYSIS ---
   const handleBulkAnalyze = async () => {
-    // --- START ANALYSIS LOADING STATE ---
     setIsAnalyzing(true);
     toast.info("Starting bulk analysis. This may take a while...");
 
@@ -110,26 +111,25 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
         console.error("Bulk analysis error:", error);
         toast.error((error as Error).message || "An error occurred during analysis.");
     } finally {
-        // --- END ANALYSIS LOADING STATE ---
         setIsAnalyzing(false);
     }
   };
 
 
   return (
-    <div className="p-4 border rounded-lg bg-gray-50 shadow-md">
-       <ToastContainer position="bottom-right" autoClose={5000} hideProgressBar={false} />
-      <h3 className="text-lg font-semibold mb-2">Upload Mistake Screenshots</h3>
+    // CHANGED: Updated styling to be more modern and dark-theme friendly
+    <div className="p-6 border border-gray-700 rounded-xl bg-gray-800 shadow-lg">
+        <ToastContainer theme="dark" position="bottom-right" autoClose={5000} hideProgressBar={false} />
+      <h3 className="text-xl font-semibold mb-4 text-white">Upload Mistake Screenshots</h3>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label htmlFor="sectionName" className="block text-sm font-medium text-gray-700">Section</label>
+          <label htmlFor="sectionName" className="block text-sm font-medium text-gray-300">Section</label>
           <select
             id="sectionName"
             value={sectionName}
             onChange={(e) => setSectionName(e.target.value)}
-            // --- DISABLE DURING OPERATIONS ---
             disabled={isUploading || isAnalyzing}
-            className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            className="mt-1 block w-full pl-3 pr-10 py-2 text-base bg-gray-700 border-gray-600 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
           >
             <option>Reasoning</option>
             <option>General Awareness</option>
@@ -137,28 +137,51 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
             <option>English Comprehension</option>
           </select>
         </div>
+        
+        {/* NEW: Textarea for mistake description, moved into the form */}
+        <div>
+            <label htmlFor="mistakeDescription" className="block text-sm font-medium text-gray-300 mb-1">
+                Describe Your Mistake (Optional but Recommended)
+            </label>
+            <textarea
+                id="mistakeDescription"
+                value={mistakeDescription}
+                onChange={(e) => setMistakeDescription(e.target.value)}
+                disabled={isUploading || isAnalyzing}
+                className="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                rows={3}
+                placeholder="e.g., 'I got confused between two options', 'I made a silly calculation error', 'I didn't know the formula'"
+            />
+        </div>
 
         <div>
-           {/* File input and other form elements here... they can also be disabled with `isUploading || isAnalyzing` */}
+            <label htmlFor="file-upload" className="block text-sm font-medium text-gray-300">Screenshots</label>
+            <input 
+                id="file-upload"
+                type="file" 
+                multiple 
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                disabled={isUploading || isAnalyzing}
+                className="mt-1 block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600"
+            />
         </div>
         
         <button
             type="submit"
-            // --- DISABLE BUTTON AND SHOW FEEDBACK ---
             disabled={isUploading || isAnalyzing}
-            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-400"
+            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
             {isUploading && <Spinner />}
             {isUploading ? 'Uploading...' : 'Upload Screenshots'}
           </button>
       </form>
       
-      <div className="mt-4 pt-4 border-t">
+      <div className="mt-4 pt-4 border-t border-gray-700">
          <button
             onClick={handleBulkAnalyze}
-            // --- DISABLE BUTTON AND SHOW FEEDBACK ---
             disabled={isAnalyzing || isUploading}
-            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400"
+            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-500 disabled:cursor-not-allowed"
           >
             {isAnalyzing && <Spinner />}
             {isAnalyzing ? 'Analyzing All...' : 'Analyze All Unanalyzed Mistakes'}
@@ -168,3 +191,4 @@ export default function ScreenshotUploader({ mockId, onUploadComplete }: Screens
     </div>
   );
 }
+

@@ -1,171 +1,207 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
+"use client";
+import { useState, useEffect } from 'react';
+import { toast } from 'react-toastify';
+// NEW: Import the image zoom/pan library
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
-
-// --- Type Definitions ---
+// --- Interface Definitions ---
 interface Mistake {
   id: number;
-  question_number: number;
-  topic: string;
-  sub_topic?: string;
-  mistake_type: string;
-  image_path: string; // Using image_path now
-  analysis_text: string; // analysis_text instead of explanation
-  notes: string;
+  image_path: string;
+  analysis_text: string | null;
+  topic: string | null;
+  notes: string | null;
 }
 
-// --- Props Definition ---
 interface MistakeFocusViewProps {
   mistake: Mistake;
-  onClose: () => void;
-  onNavigate: (direction: 'next' | 'prev') => void;
-  onNotesUpdate: (mistakeId: number, newNotes: string) => void;
+  onAnalysisComplete: () => void;
+  onDelete: (mistakeId: number) => void;
 }
 
-// --- Helper Components for Icons ---
-const CloseIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>;
-const ChevronLeftIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>;
-const ChevronRightIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>;
-const ZoomInIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>;
-const ZoomOutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7" /></svg>;
-const ResetZoomIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5M4 20h5v-5M20 4h-5v5" /></svg>;
-const InvertColorsIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>;
-
+// --- Helper Components ---
+const Spinner = () => (
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
 
 // --- Main Component ---
-export default function MistakeFocusView({ mistake, onClose, onNavigate, onNotesUpdate }: MistakeFocusViewProps) {
-    const [isInverted, setIsInverted] = useState(false);
-    const [currentNotes, setCurrentNotes] = useState(mistake.notes || '');
+export default function MistakeFocusView({ mistake, onAnalysisComplete, onDelete }: MistakeFocusViewProps) {
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [currentNotes, setCurrentNotes] = useState(mistake.notes || '');
+  
+  // NEW: State for image color inversion
+  const [isInverted, setIsInverted] = useState(false);
 
-    // Update notes when mistake changes
-    useEffect(() => {
-        setCurrentNotes(mistake.notes || '');
-    }, [mistake]);
-
-    const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setCurrentNotes(e.target.value);
-    };
-
-    const handleSaveNotes = () => {
-        onNotesUpdate(mistake.id, currentNotes);
-        // Add a visual cue for saving, e.g., a toast notification
-        alert("Notes saved!");
-    };
-
-    // Keyboard navigation
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowRight') onNavigate('next');
-            if (e.key === 'ArrowLeft') onNavigate('prev');
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onNavigate, onClose]);
+  // Sync state if the mistake prop changes
+  useEffect(() => {
+    setCurrentNotes(mistake.notes || '');
+  }, [mistake]);
 
 
-    const analysis = mistake.analysis_text || "";
-    const coreConcept = analysis.split('Your Mistake:')[0] || 'AI analysis needed.';
-    const yourMistake = analysis.split('Your Mistake:')[1]?.split('Correct Steps:')[0] || 'N/A';
-    const correctSteps = analysis.split('Correct Steps:')[1]?.split('Key Takeaway:')[0] || 'N/A';
-    const keyTakeaway = analysis.split('Key Takeaway:')[1] || 'N/A';
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center animate-fade-in">
-            {/* --- Main Grid Layout --- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 h-full w-full">
-
-                {/* --- Left Pane: Image Viewer --- */}
-                <div className="relative h-full flex flex-col items-center justify-center p-4 bg-gray-900">
-                    <TransformWrapper>
-                        {({ zoomIn, zoomOut, resetTransform }) => (
-                            <>
-                                <TransformComponent wrapperClass="w-full h-full flex items-center justify-center">
-                                    <img
-                                        src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`}
-                                        alt={`Question ${mistake.question_number}`}
-                                        className={`max-w-full max-h-full object-contain ${isInverted ? 'invert' : ''}`}
-                                    />
-                                </TransformComponent>
-                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center space-x-2 bg-gray-800 p-2 rounded-lg shadow-lg">
-                                    <button onClick={() => zoomIn()} className="p-2 hover:bg-gray-700 rounded"><ZoomInIcon/></button>
-                                    <button onClick={() => zoomOut()} className="p-2 hover:bg-gray-700 rounded"><ZoomOutIcon/></button>
-                                    <button onClick={() => resetTransform()} className="p-2 hover:bg-gray-700 rounded"><ResetZoomIcon/></button>
-                                    <button onClick={() => setIsInverted(!isInverted)} className={`p-2 hover:bg-gray-700 rounded ${isInverted ? 'bg-indigo-600' : ''}`}><InvertColorsIcon/></button>
-                                </div>
-                            </>
-                        )}
-                    </TransformWrapper>
-                </div>
-
-                {/* --- Right Pane: Analysis Hub --- */}
-                <div className="h-full bg-gray-800 p-6 md:p-8 overflow-y-auto text-white">
-                    {/* Metadata Tags */}
-                    <div className="flex flex-wrap gap-2 mb-6">
-                        <span className="bg-indigo-600 text-xs font-semibold px-3 py-1 rounded-full">Topic: {mistake.topic}</span>
-                        {mistake.sub_topic && <span className="bg-blue-600 text-xs font-semibold px-3 py-1 rounded-full">Sub-Topic: {mistake.sub_topic}</span>}
-                        <span className="bg-red-600 text-xs font-semibold px-3 py-1 rounded-full">Type: {mistake.mistake_type}</span>
-                    </div>
-
-                    <div className="space-y-6">
-                        {/* 🎯 Core Concept */}
-                        <div>
-                            <h3 className="font-bold text-lg mb-2 text-indigo-400">🎯 Core Concept</h3>
-                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{coreConcept}</p>
-                        </div>
-                        
-                        {/* 🤔 Your Approach vs. The Correct Approach */}
-                        <div>
-                            <h3 className="font-bold text-lg mb-2 text-indigo-400">🤔 Your Approach vs. Correct Approach</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-red-900/30 p-3 rounded-md">
-                                    <h4 className="font-semibold text-red-400">Your Mistake</h4>
-                                    <p className="text-sm text-gray-300">{yourMistake}</p>
-                                </div>
-                                <div className="bg-green-900/30 p-3 rounded-md">
-                                    <h4 className="font-semibold text-green-400">Correct Steps</h4>
-                                    <p className="text-sm text-gray-300 whitespace-pre-line">{correctSteps}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 💡 Key Takeaway */}
-                        <div>
-                            <h3 className="font-bold text-lg mb-2 text-indigo-400">💡 Key Takeaway</h3>
-                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md">{keyTakeaway}</p>
-                        </div>
-                        
-                        {/* ✍️ Personal Notes */}
-                        <div>
-                            <h3 className="font-bold text-lg mb-2 text-indigo-400">✍️ Personal Notes</h3>
-                            <div className="bg-yellow-200/10 p-4 rounded-md">
-                                <textarea
-                                    className="w-full h-24 bg-transparent text-yellow-200 placeholder-yellow-200/50 border-0 focus:ring-0 resize-none"
-                                    placeholder="Add your own thoughts here..."
-                                    value={currentNotes}
-                                    onChange={handleNotesChange}
-                                />
-                                <div className="text-right mt-2">
-                                    <button 
-                                        onClick={handleSaveNotes}
-                                        className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-1 px-3 text-sm rounded transition-colors"
-                                    >
-                                        Save Notes
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    toast.info('Analyzing mistake...');
+    try {
+      // NOTE: The user's notes are now automatically included in the analysis via the backend logic
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/mistakes/${mistake.id}/analyze-text`, {
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error('Failed to analyze mistake');
+      toast.success('Analysis complete!');
+      onAnalysisComplete();
+    } catch (error) {
+      console.error('Analysis error:', error);
+      toast.error('An error occurred during analysis.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+  
+  const handleDelete = async () => {
+      // CHANGED: Replaced window.confirm with a toast notification for better UX
+      toast(
+        ({ closeToast }) => (
+          <div className="flex flex-col">
+            <p className="font-semibold">Are you sure?</p>
+            <p className="text-sm">This action cannot be undone.</p>
+            <div className="flex justify-end mt-2 space-x-2">
+               <button onClick={closeToast} className="px-3 py-1 text-sm rounded bg-gray-600">Cancel</button>
+               <button onClick={async () => {
+                  closeToast();
+                  setIsDeleting(true);
+                  toast.info('Deleting mistake...');
+                  try {
+                      await onDelete(mistake.id);
+                      toast.success('Mistake deleted.');
+                  } catch (error) {
+                      toast.error('Failed to delete mistake.');
+                  } finally {
+                      setIsDeleting(false);
+                  }
+               }} className="px-3 py-1 text-sm rounded bg-red-600 text-white">Delete</button>
             </div>
+          </div>
+        ), { autoClose: false, closeButton: false }
+      );
+  };
 
-            {/* --- Navigation and Close Buttons --- */}
-            <button onClick={onClose} className="absolute top-4 right-4 text-white hover:text-indigo-400"><CloseIcon/></button>
-            <button onClick={() => onNavigate('prev')} className="absolute left-4 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 p-2 bg-black/50 rounded-full"><ChevronLeftIcon/></button>
-            <button onClick={() => onNavigate('next')} className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-indigo-400 p-2 bg-black/50 rounded-full"><ChevronRightIcon/></button>
+  const handleSaveNotes = async () => {
+    toast.info('Saving note...');
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/mistakes/${mistake.id}/notes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: currentNotes }),
+      });
+      if (!response.ok) throw new Error('Failed to save note');
+      toast.success('Note saved successfully!');
+      setIsEditingNotes(false);
+      onAnalysisComplete(); 
+    } catch (error) {
+      console.error('Save notes error:', error);
+      toast.error('Failed to save note.');
+    }
+  };
+
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-4 h-full">
+      {/* --- CHANGED: Left side is now the interactive image viewer --- */}
+      <div className="flex flex-col bg-gray-900 rounded-lg p-4">
+          <h3 className="text-lg font-bold text-white mb-2">Question Screenshot</h3>
+           <TransformWrapper>
+            {({ zoomIn, zoomOut, resetTransform }) => (
+              <>
+                {/* Image Controls */}
+                <div className="flex items-center space-x-2 mb-2">
+                  <button onClick={() => zoomIn()} className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 text-white text-xs">Zoom In</button>
+                  <button onClick={() => zoomOut()} className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 text-white text-xs">Zoom Out</button>
+                  <button onClick={() => resetTransform()} className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 text-white text-xs">Reset</button>
+                  <button onClick={() => setIsInverted(!isInverted)} className="p-2 bg-gray-700 rounded-md hover:bg-gray-600 text-white text-xs">
+                    {isInverted ? 'Normal Colors' : 'Invert Colors'}
+                  </button>
+                </div>
+                {/* The Image Itself */}
+                <div className="flex-grow flex items-center justify-center rounded-lg overflow-hidden border border-gray-700">
+                    <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full">
+                        <img
+                            src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`}
+                            alt="Mistake screenshot"
+                            className={`max-w-full max-h-full object-contain cursor-grab ${isInverted ? 'filter invert' : ''}`}
+                        />
+                    </TransformComponent>
+                </div>
+              </>
+            )}
+          </TransformWrapper>
+      </div>
+
+      {/* Right side: Analysis and Notes */}
+      <div className="flex flex-col space-y-4">
+        <div className="bg-gray-900 rounded-lg p-4">
+          <h3 className="text-lg font-bold text-white mb-2">Your Note / Mistake Description</h3>
+          {isEditingNotes ? (
+            <div className="space-y-2">
+              <textarea
+                value={currentNotes}
+                onChange={(e) => setCurrentNotes(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-md shadow-sm py-2 px-3 text-white focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                rows={4}
+                placeholder="e.g., 'I confused the formula for simple and compound interest...'"
+              />
+              <div className="flex justify-end space-x-2">
+                 <button onClick={() => setIsEditingNotes(false)} className="px-3 py-1 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600">Cancel</button>
+                 <button onClick={handleSaveNotes} className="px-3 py-1 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">Save Note</button>
+              </div>
+            </div>
+          ) : (
+             <div className="space-y-3">
+                 <p className="text-gray-300 text-sm whitespace-pre-wrap min-h-[4rem]">
+                    {mistake.notes || <span className="text-gray-500 italic">No note added yet. Click edit to add your analysis.</span>}
+                 </p>
+                 <div className="flex justify-end">
+                    <button onClick={() => setIsEditingNotes(true)} className="px-3 py-1 text-sm font-medium rounded-md text-white bg-gray-700 hover:bg-gray-600">{mistake.notes ? 'Edit Note' : 'Add Note'}</button>
+                 </div>
+             </div>
+          )}
         </div>
-    );
+
+        <div className="bg-gray-900 rounded-lg p-4 flex-grow flex flex-col">
+          <h3 className="text-lg font-bold text-white mb-2">AI Analysis</h3>
+          <div className="text-gray-300 text-sm whitespace-pre-wrap overflow-y-auto flex-grow">
+            {mistake.analysis_text ? (
+                mistake.analysis_text
+            ) : (
+                <p className="text-gray-500 italic">This mistake has not been analyzed yet. {mistake.notes ? "" : "Add a note above for better results!"}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex space-x-4">
+          <button
+            onClick={handleAnalyze}
+            disabled={isAnalyzing || !!mistake.analysis_text}
+            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-500 disabled:cursor-not-allowed"
+          >
+            {isAnalyzing && <Spinner />}
+            {mistake.analysis_text ? 'Analyzed' : 'Analyze Now'}
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:bg-gray-500"
+          >
+             {isDeleting && <Spinner />}
+             Delete Mistake
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
+

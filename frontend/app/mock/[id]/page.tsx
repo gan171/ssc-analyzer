@@ -182,13 +182,32 @@ const MockDetailPage = () => {
   return (
     <div className="container mx-auto p-4 md:p-8">
         {selectedMistake && (
+    <div className="fixed inset-0 bg-black bg-opacity-80 z-50 flex items-center justify-center p-4">
+        <div className="bg-gray-800 border border-gray-700 rounded-xl shadow-xl w-full max-w-6xl h-full max-h-[90vh] relative">
             <MistakeFocusView
                 mistake={selectedMistake}
-                onClose={closeFocusView}
-                onNavigate={navigateMistake}
-                onNotesUpdate={handleNotesUpdate}
+                // Pass a function to close the modal
+                onDelete={handleDeleteMistake}
+                onAnalysisComplete={() => {
+                    // Refreshes data in both the modal and the background list
+                    fetchMistakes();
+                    // Find the updated mistake from the list to update the view
+                    const updatedMistake = mistakes.find(m => m.id === selectedMistake.id);
+                    if (updatedMistake) {
+                        setSelectedMistake(updatedMistake);
+                    }
+                }}
             />
-        )}
+             <button 
+                onClick={() => setSelectedMistake(null)} 
+                className="absolute top-3 right-3 text-gray-400 hover:text-white bg-gray-900 rounded-full p-1"
+                aria-label="Close"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+             </button>
+        </div>
+    </div>
+)}
       {/* ... (Existing JSX for mock details and sections) ... */}
       
       <div className="bg-gray-800 shadow-xl rounded-lg p-6 mb-8 text-white">
@@ -285,7 +304,11 @@ const MockDetailPage = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {mistakes.map((mistake, index) => (
-            <div key={mistake.id} className="bg-gray-800 shadow-lg rounded-lg overflow-hidden cursor-pointer" onClick={() => openFocusView(mistake, index)}>
+            <div 
+              key={mistake.id} 
+              className="bg-gray-800 rounded-lg shadow-md p-4 flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+              onClick={() => setSelectedMistake(mistake)}
+            >
               <img src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>
               <div className="p-4">
                 <p className="text-sm text-gray-400 mb-2">Section: {mistake.section_name} ({mistake.question_type})</p>
