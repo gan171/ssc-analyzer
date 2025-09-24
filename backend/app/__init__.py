@@ -23,7 +23,7 @@ def create_app(config_class='config.Config'):
         os.makedirs(app.config['UPLOAD_FOLDER'])
 
     # Register blueprints
-    app.register_blueprint(api_blueprint, url_prefix='/')
-    app.register_blueprint(analytics_blueprint, url_prefix='/')
+    app.register_blueprint(api_blueprint, url_prefix='/api')
+    app.register_blueprint(analytics_blueprint, url_prefix='/api')
 
     return app

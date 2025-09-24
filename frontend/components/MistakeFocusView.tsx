@@ -130,7 +130,7 @@ export default function MistakeFocusView({ mistake, onAnalysisComplete, onDelete
                 <div className="flex-grow flex items-center justify-center rounded-lg overflow-hidden border border-gray-700">
                     <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full">
                         <img
-                            src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`}
+                            src={`${process.env.NEXT_PUBLIC_API_URL}/api/uploads/${mistake.image_path}`}
                             alt="Mistake screenshot"
                             className={`max-w-full max-h-full object-contain cursor-grab ${isInverted ? 'filter invert' : ''}`}
                         />

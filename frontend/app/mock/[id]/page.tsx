@@ -57,7 +57,7 @@ const MockDetailPage = () => {
   const fetchMistakes = useCallback(async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/mocks/${id}/mistakes`);
+      const res = await fetch(`${API_BASE_URL}/mocks/${id}/mistakes`);
       if (!res.ok) throw new Error('Failed to fetch mistakes');
       const data = await res.json();
       setMistakes(data);
@@ -92,7 +92,7 @@ const MockDetailPage = () => {
 
   const handleAnalyzeClick = async (mistakeId: number, analysisType: 'visual' | 'text') => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}/analyze-${analysisType}`, {
+      const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/analyze-text`, { 
         method: 'POST',
       });
       if (!res.ok) {
@@ -108,7 +108,7 @@ const MockDetailPage = () => {
   const handleDeleteMistake = async (mistakeId: number) => {
     if (window.confirm('Are you sure you want to delete this mistake?')) {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}`, {
+        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}`, {
           method: 'DELETE',
         });
         if (!res.ok) throw new Error('Failed to delete mistake');
@@ -122,7 +122,7 @@ const MockDetailPage = () => {
   const handleBulkAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/mocks/${id}/analyze-all-mistakes`, {
+      const res = await fetch(`${API_BASE_URL}/mocks/${id}/analyze-all-mistakes`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -157,7 +157,7 @@ const MockDetailPage = () => {
 
   const handleNotesUpdate = async (mistakeId: number, newNotes: string) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}/notes`, {
+        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/notes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes: newNotes }),
@@ -309,7 +309,7 @@ const MockDetailPage = () => {
               className="bg-gray-800 rounded-lg shadow-md p-4 flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
               onClick={() => setSelectedMistake(mistake)}
             >
-              <img src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>
+              <img src={`${process.env.NEXT_PUBLIC_API_URL}/api/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>
               <div className="p-4">
                 <p className="text-sm text-gray-400 mb-2">Section: {mistake.section_name} ({mistake.question_type})</p>
                 {mistake.analysis_text ? (

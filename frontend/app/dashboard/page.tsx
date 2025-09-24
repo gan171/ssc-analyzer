@@ -68,7 +68,7 @@ const DashboardPage = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/mocks/${mockId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/mocks/${mockId}`, {
         method: 'DELETE',
       });
 
