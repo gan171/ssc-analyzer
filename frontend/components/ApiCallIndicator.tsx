@@ -7,7 +7,7 @@ const ApiCallIndicator = () => {
     useEffect(() => {
         const fetchCount = async () => {
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/analytics/today-api-calls`);
+                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/analytics/today-api-calls`);
                 if (res.ok) {
                     const data = await res.json();
                     setCallCount(data.count);

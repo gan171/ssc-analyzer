@@ -57,7 +57,7 @@ const MockDetailPage = () => {
   const fetchMistakes = useCallback(async () => {
     if (!id) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/mocks/${id}/mistakes`);
+      const res = await fetch(`${API_BASE_URL}/api/mocks/${id}/mistakes`);
       if (!res.ok) throw new Error('Failed to fetch mistakes');
       const data = await res.json();
       setMistakes(data);
@@ -92,7 +92,7 @@ const MockDetailPage = () => {
 
   const handleAnalyzeClick = async (mistakeId: number, analysisType: 'visual' | 'text') => {
     try {
-      const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/analyze-${analysisType}`, {
+      const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}/analyze-${analysisType}`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -108,7 +108,7 @@ const MockDetailPage = () => {
   const handleDeleteMistake = async (mistakeId: number) => {
     if (window.confirm('Are you sure you want to delete this mistake?')) {
       try {
-        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}`, {
+        const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}`, {
           method: 'DELETE',
         });
         if (!res.ok) throw new Error('Failed to delete mistake');
@@ -122,7 +122,7 @@ const MockDetailPage = () => {
   const handleBulkAnalyze = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/mocks/${id}/analyze-all-mistakes`, {
+      const res = await fetch(`${API_BASE_URL}/api/mocks/${id}/analyze-all-mistakes`, {
         method: 'POST',
       });
       if (!res.ok) {
@@ -157,7 +157,7 @@ const MockDetailPage = () => {
 
   const handleNotesUpdate = async (mistakeId: number, newNotes: string) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/mistakes/${mistakeId}/notes`, {
+        const res = await fetch(`${API_BASE_URL}/api/mocks/mistakes/${mistakeId}/notes`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ notes: newNotes }),
