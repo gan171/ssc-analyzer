@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import React from 'react';
+import WeaknessTreemap from '../../components/report/WeaknessTreemap';
 
 // --- TYPE DEFINITIONS ---
 interface SectionData {
@@ -155,7 +156,11 @@ const PerformanceReportPage = () => {
         const data = await res.json();
         setReportData(data);
       } catch (err: unknown) {
-        setError(err.message);
+          if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError("An unknown error occurred");
+        }
       } finally {
         setIsLoading(false);
       }
@@ -192,6 +197,7 @@ const PerformanceReportPage = () => {
   return (
     <div className="container mx-auto p-4 md:p-8 text-white">
       <h1 className="text-4xl font-bold mb-8">Performance Overview</h1>
+      <WeaknessTreemap />
       
       <ReportCard data={reportData.report_card} />
 
