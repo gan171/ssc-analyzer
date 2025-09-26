@@ -306,7 +306,7 @@ const MockDetailPage = () => {
           {mistakes.map((mistake, index) => (
             <div 
               key={mistake.id} 
-              className="bg-gray-800 rounded-lg shadow-md p-4 flex flex-col cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
+              className="bg-gray-800 rounded-lg shadow-md p-4 flex flex-col justify-between cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
               onClick={() => setSelectedMistake(mistake)}
             >
               <img src={`${process.env.NEXT_PUBLIC_API_URL}/api/uploads/${mistake.image_path}`} alt={`Mistake ${mistake.id}`} className="w-full h-48 object-cover"/>

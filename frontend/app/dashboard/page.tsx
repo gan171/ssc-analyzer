@@ -11,6 +11,7 @@ interface Mock {
   score_overall: number;
   percentile_overall: number;
   date_taken: string;
+  is_analyzed: boolean; // Ensures the frontend knows the mock's status
 }
 
 // --- SVG Icons for Buttons ---
@@ -25,7 +26,6 @@ const GlobeIcon = () => (
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 011.523-1.943A5.998 5.998 0 0116 10c0 .343-.011.683-.034 1.022a2.53 2.53 0 00-1.022-1.022A2.5 2.5 0 0012.5 8 1.5 1.5 0 0111 6.5V6a2 2 0 00-4 0v.5a1.5 1.5 0 01-1.5 1.5c-.526 0-.988-.27-1.256-.703a6.002 6.002 0 01-1.912-2.706zM10 12.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" clipRule="evenodd" />
     </svg>
 );
-
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -43,7 +43,7 @@ const DashboardPage = () => {
       if (!res.ok) throw new Error('Failed to fetch mocks');
       const data = await res.json();
       setMocks(data);
-    } catch (err: unknown) {
+    } catch (err: any) {
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -80,18 +80,23 @@ const DashboardPage = () => {
     }
   };
 
-
   const summaryStats = useMemo(() => {
     if (mocks.length === 0) return { total: 0, avgScore: 0, avgPercentile: 0 };
+    const analyzedMocks = mocks.filter(m => m.is_analyzed);
+    if (analyzedMocks.length === 0) return { total: mocks.length, avgScore: 0, avgPercentile: 0 };
     const total = mocks.length;
-    const avgScore = mocks.reduce((acc, mock) => acc + mock.score_overall, 0) / total;
-    const avgPercentile = mocks.reduce((acc, mock) => acc + mock.percentile_overall, 0) / total;
+    const avgScore = analyzedMocks.reduce((acc, mock) => acc + mock.score_overall, 0) / analyzedMocks.length;
+    const avgPercentile = analyzedMocks.reduce((acc, mock) => acc + mock.percentile_overall, 0) / analyzedMocks.length;
     return { 
         total, 
         avgScore: avgScore.toFixed(2),
         avgPercentile: avgPercentile.toFixed(2)
     };
   }, [mocks]);
+
+  // Separate mocks into analyzed and unanalyzed
+  const analyzedMocks = mocks.filter(mock => mock.is_analyzed);
+  const unanalyzedMocks = mocks.filter(mock => !mock.is_analyzed);
 
   if (isLoading) {
     return <div className="text-center p-12 text-xl">Loading dashboard...</div>;
@@ -115,7 +120,6 @@ const DashboardPage = () => {
                 <GlobeIcon/> Import from Testbook
             </button>
         </div>
-         {/* Modal for Forms */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-start z-50 overflow-y-auto p-4 pt-12 md:pt-20">
             <div className="bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-2xl relative">
@@ -130,6 +134,45 @@ const DashboardPage = () => {
       </div>
     );
   }
+  
+  // Helper to render a list of mocks
+  const renderMockList = (mockList: Mock[], title: string) => (
+    <div className="bg-gray-800 p-6 rounded-lg shadow-lg mb-8">
+      <h2 className="text-2xl font-semibold text-white mb-4">{title}</h2>
+      {mockList.length > 0 ? (
+        <div className="space-y-4">
+          {mockList.map((mock) => (
+            <Link href={`/mock/${mock.id}`} key={mock.id} className="block group">
+              <div className="grid grid-cols-12 items-center gap-4 bg-gray-700/50 p-4 rounded-lg group-hover:bg-gray-700/80 transition-all">
+                <div className="col-span-6">
+                  <p className="font-bold text-white truncate">{mock.name}</p>
+                  <p className="text-sm text-gray-400">{new Date(mock.date_taken).toLocaleDateString()}</p>
+                </div>
+                <div className="col-span-2 text-center">
+                  <p className="text-sm text-gray-400">Score</p>
+                  <p className="font-semibold text-green-400">{mock.score_overall}</p>
+                </div>
+                <div className="col-span-2 text-center">
+                  <p className="text-sm text-gray-400">Percentile</p>
+                  <p className="font-semibold text-blue-400">{mock.percentile_overall}%</p>
+                </div>
+                <div className="col-span-2 text-right">
+                    <button
+                      onClick={(e) => handleDeleteMock(mock.id, e)}
+                      className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      Delete
+                  </button>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="text-gray-400">No mocks found in this category.</p>
+      )}
+    </div>
+  );
 
   // --- EXISTING USER VIEW ---
   return (
@@ -154,38 +197,9 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      {/* Mock List */}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-semibold text-white mb-4">Recent Mocks</h2>
-        <div className="space-y-4">
-          {mocks.map((mock) => (
-             <Link href={`/mock/${mock.id}`} key={mock.id} className="block group">
-                <div className="grid grid-cols-12 items-center gap-4 bg-gray-700/50 p-4 rounded-lg group-hover:bg-gray-700/80 transition-all">
-                  <div className="col-span-6">
-                    <p className="font-bold text-white truncate">{mock.name}</p>
-                    <p className="text-sm text-gray-400">{new Date(mock.date_taken).toLocaleDateString()}</p>
-                  </div>
-                  <div className="col-span-2 text-center">
-                    <p className="text-sm text-gray-400">Score</p>
-                    <p className="font-semibold text-green-400">{mock.score_overall}</p>
-                  </div>
-                  <div className="col-span-2 text-center">
-                    <p className="text-sm text-gray-400">Percentile</p>
-                    <p className="font-semibold text-blue-400">{mock.percentile_overall}%</p>
-                  </div>
-                  <div className="col-span-2 text-right">
-                     <button
-                        onClick={(e) => handleDeleteMock(mock.id, e)}
-                        className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                        Delete
-                    </button>
-                  </div>
-                </div>
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Mock Lists */}
+      {renderMockList(unanalyzedMocks, "Unanalyzed Mocks")}
+      {renderMockList(analyzedMocks, "Analyzed Mocks")}
 
       {/* Modal for Forms */}
       {showModal && (

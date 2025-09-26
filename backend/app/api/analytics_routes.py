@@ -3,69 +3,25 @@ from app.extensions import db
 from ..models.mock import Mock
 from ..models.mistake import Mistake
 from ..models.section import Section
-from ..models.api_call_counter import ApiCallCounter
-from sqlalchemy import func, desc # Import desc
-from collections import defaultdict
+from sqlalchemy import func
 import math
-from datetime import date
 
 analytics_blueprint = Blueprint('analytics', __name__)
 
-
-@analytics_blueprint.route("/analytics/today-api-calls", methods=['GET'])
-def today_api_calls():
-    """
-    Returns the number of API calls made today.
-    """
+@analytics_blueprint.route("/analytics/topic-summary", methods=['GET'])
+def topic_summary():
     try:
-        today = date.today()
-        counter = ApiCallCounter.query.filter_by(date=today).first()
-        count = counter.count if counter else 0
-        return jsonify({"count": count})
-    except Exception as e:
-        return jsonify({"error": "Could not fetch API call count", "message": str(e)}), 500
-
-@analytics_blueprint.route("/analytics/weakness-breakdown", methods=['GET'])
-def weakness_breakdown():
-    """
-    Generates a hierarchical breakdown of mistakes by subject, topic, and sub-topic.
-    """
-    try:
-        mistake_count_label = func.count(Mistake.id).label('mistake_count')
-
-        mistakes_query = db.session.query(
-            Mistake.subject,
+        summary_query = db.session.query(
             Mistake.topic,
-            Mistake.sub_topic,
-            mistake_count_label
-        ).filter(
-            Mistake.subject.isnot(None),
-            Mistake.topic.isnot(None)
-        ).group_by(
-            Mistake.subject,
-            Mistake.topic,
-            Mistake.sub_topic
-        ).order_by(
-            Mistake.subject,
-            Mistake.topic,
-            desc(mistake_count_label) # --- CORRECTED THIS LINE ---
+            db.func.count(Mistake.topic).label('mistake_count')
+        ).filter(Mistake.topic.isnot(None)).group_by(Mistake.topic).order_by(
+            db.func.count(Mistake.topic).desc()
         ).all()
 
-        weakness_tree = defaultdict(lambda: defaultdict(list))
-        for subject, topic, sub_topic, count in mistakes_query:
-            sub_topic_name = sub_topic if sub_topic else "General"
-            weakness_tree[subject][topic].append({"name": sub_topic_name, "value": count})
-
-        formatted_summary = []
-        for subject, topics in weakness_tree.items():
-            subject_children = []
-            for topic, sub_topics in topics.items():
-                subject_children.append({"name": topic, "children": sub_topics})
-            formatted_summary.append({"name": subject, "children": subject_children})
-
-        return jsonify(formatted_summary)
+        summary = [{"topic": topic, "count": count} for topic, count in summary_query]
+        return jsonify(summary)
     except Exception as e:
-        return jsonify({"error": "Could not generate weakness breakdown", "message": str(e)}), 500
+        return jsonify({"error": "Could not generate summary", "message": str(e)}), 500
 
 
 @analytics_blueprint.route("/analytics/performance-trajectory", methods=['GET'])
@@ -109,11 +65,13 @@ def sectional_deep_dive():
         return jsonify({"error": "Could not generate sectional deep dive", "message": str(e)}), 500
 
 
+# --- NEW PERFORMANCE REPORT ROUTE ---
 @analytics_blueprint.route("/analytics/performance-report", methods=['GET'])
 def performance_report():
     try:
         all_mocks = Mock.query.order_by(Mock.date_taken.desc()).all()
         
+        # --- FULL MOCK LOG (We'll calculate this first as we need the data) ---
         full_mock_log = []
         for mock in all_mocks:
             sections_data = {}
@@ -144,20 +102,23 @@ def performance_report():
         if not all_mocks:
             return jsonify({"full_mock_log": [], "report_card": {}})
 
+        # --- REPORT CARD CALCULATIONS ---
         total_mocks = len(all_mocks)
+        # Score Brackets
         score_brackets = {">"+str(s): 0 for s in range(120, 181, 10)}
         for m in all_mocks:
             for score_limit in range(120, 181, 10):
                 if m.score_overall > score_limit:
                     score_brackets[">"+str(score_limit)] += 1
         
+        # Percentile Brackets
         percentile_brackets = {">"+str(p): 0 for p in [40, 50, 60, 70, 80, 90, 95]}
         for m in all_mocks:
-            if m.percentile_overall:
-                for p_limit in [40, 50, 60, 70, 80, 90, 95]:
-                    if m.percentile_overall > p_limit:
-                        percentile_brackets[">"+str(p_limit)] += 1
+            for p_limit in [40, 50, 60, 70, 80, 90, 95]:
+                if m.percentile_overall > p_limit:
+                    percentile_brackets[">"+str(p_limit)] += 1
         
+        # Last N Mocks
         def get_last_n_mocks(n):
             return [{
                 "name": m["name"], "total": m["total_score"],
@@ -169,12 +130,11 @@ def performance_report():
                 "negative": m["totals"]["marks"]["negative"],
             } for m in full_mock_log[:n]]
 
+        # Sectional Averages
         sectional_averages = {"maths": 0, "reasoning": 0, "english": 0, "gk": 0}
         for sec in sectional_averages.keys():
             scores = [m["sections"].get(sec, {}).get("marks", {}).get("net", 0) for m in full_mock_log]
             sectional_averages[sec] = round(sum(scores) / len(scores), 2) if scores else 0
-
-        overall_avg = round(sum(m.score_overall for m in all_mocks) / total_mocks, 2) if total_mocks > 0 else 0
 
         report_card_data = {
             "score_brackets": score_brackets,
@@ -183,7 +143,7 @@ def performance_report():
             "last_5_mocks": get_last_n_mocks(5),
             "last_10_mocks": get_last_n_mocks(10),
             "sectional_averages": sectional_averages,
-            "overall_avg_score": overall_avg,
+            "overall_avg_score": round(sum(m.score_overall for m in all_mocks) / total_mocks, 2),
             "total_mocks": total_mocks
         }
 
@@ -193,3 +153,6 @@ def performance_report():
         import traceback
         traceback.print_exc()
         return jsonify({"error": "Could not generate performance report", "message": str(e)}), 500
+
+
+
