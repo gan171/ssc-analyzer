@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@types/recharts": "^1.8.29",
     "next": "15.5.3",
     "nprogress": "^0.2.0",

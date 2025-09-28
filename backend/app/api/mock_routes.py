@@ -158,7 +158,7 @@ def analyze_mistake(mistake_id): # Renamed for clarity, though not strictly requ
     try:
         increment_api_call_counter()
         genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         # CHANGED: Use the dynamic prompt function with data from the DB
         prompt = get_dynamic_prompt(mistake.section_name, mistake.notes)
@@ -200,7 +200,7 @@ def bulk_analyze_mistakes(mock_id):
         return jsonify({"message": "All mistakes were already analyzed."}), 200
 
     genai.configure(api_key=current_app.config['GEMINI_API_KEY'])
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     analyzed_count = 0
     errors = []
