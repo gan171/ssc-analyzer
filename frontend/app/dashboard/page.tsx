@@ -49,7 +49,11 @@ const DashboardPage = () => {
       const data = await res.json();
       setMocks(data);
     } catch (err) {
-      setError((err as Error).message);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('An unexpected error occurred');
+      }
     } finally {
       setIsLoading(false);
     }
