@@ -48,7 +48,7 @@ const DashboardPage = () => {
       if (!res.ok) throw new Error('Failed to fetch mocks');
       const data = await res.json();
       setMocks(data);
-    } catch (err) {
+    } catch (err : unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -132,7 +132,7 @@ const DashboardPage = () => {
       setEditingMockId(null); // Exit editing mode
       fetchMocks(); // Refresh the list of mocks with the new name
       
-    } catch (err) {
+    } catch (err: unknown ) {
       console.error(err);
       // Optionally, show an error message to the user
     }
@@ -156,7 +156,7 @@ const DashboardPage = () => {
     alert(result.message); // Show a success message
     fetchMocks(); // Refresh the dashboard to show the new tiers
     
-  } catch (err) {
+  } catch (err : unknown) {
     console.error(err);
     alert('An error occurred while updating tiers.');
   }
