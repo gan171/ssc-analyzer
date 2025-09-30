@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: ssc-analyzer-frontend
+    env: static
+    rootDir: frontend
+    staticPublishPath: ./build
+    pullRequestPreviewsEnabled: true
+    buildFilter:
+      paths:
+      - frontend/**/*
+  - type: web
+    name: ssc-analyzer-backend
+    env: docker
+    rootDir: backend
+    pullRequestPreviewsEnabled: true
+    plan: free
+    healthCheckPath: /api/mocks
+    envVars:
+      - key: postgresql://ssc_analyzer_db1_user:4wXhjcsSaN5DulMUZ1hornqL6jMIyHph@dpg-d3e192ndiees73fpcc2g-a/ssc_analyzer_db1
+        fromDatabase:
+          name: ssc-analyzer-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AIzaSyDaAA7HZktWN3rrW7VMCPvM6U0eDyazNC8
+        sync: false
+    preDeployCommand:
+      - flask db upgrade
