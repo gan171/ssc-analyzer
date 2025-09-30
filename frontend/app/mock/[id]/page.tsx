@@ -310,17 +310,16 @@ const MockDetailPage = () => {
   // Grid responsiveness
   const [gridCols, setGridCols] = useState(3);
 
-  // Toast management
-  const addToast = (message: string, type: Toast['type'] = 'info', duration = 3000) => {
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const addToast = useCallback((message: string, type: Toast['type'] = 'info', duration = 3000) => {
     const id = Date.now();
     const toast = { id, message, type };
     setToasts(prev => [...prev, toast]);
     setTimeout(() => removeToast(id), duration);
-  };
-
-  const removeToast = (id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
+  }, [removeToast]);
 
   // Retry mechanism
   const retryFetch = async (fetchFunction: () => Promise<void>, maxRetries = 3) => {
@@ -359,7 +358,7 @@ const MockDetailPage = () => {
     } finally {
       setLoadingStates(prev => ({ ...prev, mistakes: false }));
     }
-  }, [id]);
+    }, [id, addToast]);
 
   // Auto-save notes effect
   useEffect(() => {
@@ -421,7 +420,7 @@ const MockDetailPage = () => {
   }, [selectedMistake, selectedMistakeIndex]);
 
   // Initial data fetch
-  useEffect(() => {
+   useEffect(() => {
     const fetchMock = async () => {
       if (!id) return;
       setLoadingStates(prev => ({ ...prev, mock: true }));
@@ -441,7 +440,7 @@ const MockDetailPage = () => {
       }
     };
     fetchMock();
-  }, [id, fetchMistakes]);
+  }, [id, fetchMistakes, addToast]);
 
   // Filtered mistakes
   const filteredMistakes = useMemo(() => {

@@ -4,7 +4,9 @@ from .extensions import db
 from .api.mock_routes import api_blueprint
 from .api.analytics_routes import analytics_blueprint
 from flask_migrate import Migrate
-from flask_cors import CORS # NEW: Import the CORS library
+from flask_cors import CORS 
+from .api.practice_routes import practice_routes
+
 
 def create_app(config_class='config.Config'):
     app = Flask(__name__)
@@ -25,5 +27,7 @@ def create_app(config_class='config.Config'):
     # Register blueprints
     app.register_blueprint(api_blueprint, url_prefix='/api')
     app.register_blueprint(analytics_blueprint, url_prefix='/api')
+    app.register_blueprint(practice_routes, url_prefix='/api')
+
 
     return app

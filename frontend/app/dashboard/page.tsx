@@ -1,3 +1,5 @@
+// frontend/app/dashboard/page.tsx
+
 'use client';
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
@@ -12,6 +14,7 @@ interface Mock {
   percentile_overall: number;
   date_taken: string;
   is_analyzed: boolean; // Ensures the frontend knows the mock's status
+  tier: string;
 }
 
 // --- SVG Icons for Buttons ---
@@ -34,6 +37,8 @@ const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState<'add' | 'import' | null>(null);
+  const [editingMockId, setEditingMockId] = useState<number | null>(null);
+  const [newMockName, setNewMockName] = useState<string>('');
 
   const fetchMocks = async () => {
     try {
@@ -146,7 +151,9 @@ const DashboardPage = () => {
               <div className="grid grid-cols-12 items-center gap-4 bg-gray-700/50 p-4 rounded-lg group-hover:bg-gray-700/80 transition-all">
                 <div className="col-span-6">
                   <p className="font-bold text-white truncate">{mock.name}</p>
-                  <p className="text-sm text-gray-400">{new Date(mock.date_taken).toLocaleDateString()}</p>
+                  <p className="text-sm text-gray-400">{new Date(mock.date_taken).toLocaleDateString()}
+                  {mock.tier && <span className="ml-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs">{mock.tier}</span>}
+                  </p>
                 </div>
                 <div className="col-span-2 text-center">
                   <p className="text-sm text-gray-400">Score</p>

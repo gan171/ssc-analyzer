@@ -1,3 +1,5 @@
+# backend/app/api/mock_routes.py
+
 import os
 from flask import Blueprint, jsonify, request, send_from_directory, current_app
 from werkzeug.utils import secure_filename
@@ -81,11 +83,19 @@ def handle_mocks():
 
     if request.method == 'POST':
         data = request.get_json()
+        
+        tier = None
+        if data['score_overall'] == 200:
+            tier = "Tier 1"
+        elif data['score_overall'] == 390:
+            tier = "Tier 2"
+
         new_mock = Mock(
             name=data['name'],
             score_overall=data['score_overall'],
             percentile_overall=data['percentile_overall'],
-            date_taken=data['date_taken']
+            date_taken=data['date_taken'],
+            tier=tier
         )
         db.session.add(new_mock)
         db.session.commit()
@@ -106,10 +116,18 @@ def handle_mocks():
 
         return jsonify({"id": new_mock.id, "message": "Mock created successfully!"}), 201
 
-@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET'])
+@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'PUT'])
 def get_mock_details(mock_id):
     mock = Mock.query.get_or_404(mock_id)
-    return jsonify(mock.to_dict())
+    if request.method == 'GET':
+        return jsonify(mock.to_dict())
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        mock.name = data.get('name', mock.name)
+        db.session.commit()
+        return jsonify(mock.to_dict())
+
 
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])
 @cross_origin()

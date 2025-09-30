@@ -1,4 +1,5 @@
 from app.extensions import db
+from sqlalchemy.dialects.postgresql import JSON
 
 class Mistake(db.Model):
     __tablename__ = 'mistakes'
@@ -10,10 +11,15 @@ class Mistake(db.Model):
     question_type = db.Column(db.String(50), nullable=False) # incorrect or unattempted
     mock_id = db.Column(db.Integer, db.ForeignKey('mocks.id'), nullable=False)
     notes = db.Column(db.Text, nullable=True)
+    question_text = db.Column(db.Text, nullable=True)
+    options = db.Column(JSON, nullable=True)
+    correct_option = db.Column(db.String(1), nullable=True)
+    difficulty = db.Column(db.String(50), nullable=True, default='unseen')
+    tier = db.Column(db.String(50)) 
 
     def __repr__(self):
         return f'<Mistake {self.id} for Mock {self.mock_id}>'
-    
+
     def to_dict(self):
         """Serializes the object to a dictionary."""
         return {
@@ -24,5 +30,10 @@ class Mistake(db.Model):
             'topic': self.topic,
             'section_name': self.section_name,
             'question_type': self.question_type,
-            'notes': self.notes
+            'notes': self.notes,
+            'question_text': self.question_text,
+            'options': self.options,
+            'correct_option': self.correct_option,
+            'difficulty': self.difficulty,
+            'tier': self.tier
         }
