@@ -24,5 +24,9 @@ services:
         generateValue: true
       - key: AIzaSyDaAA7HZktWN3rrW7VMCPvM6U0eDyazNC8
         sync: false
+      - key: FLASK_APP 
+        value: run.py   
+      - key: FLASK_DEBUG
+        value: 0 
     preDeployCommand:
       - flask db upgrade
