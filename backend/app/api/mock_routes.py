@@ -84,18 +84,21 @@ def handle_mocks():
     if request.method == 'POST':
         data = request.get_json()
         
+        # 👇 NEW: Determine tier based on total_marks
         tier = None
-        if data['score_overall'] == 200:
+        total_marks = data.get('total_marks', 0) # Get total_marks from request
+        if total_marks == 200:
             tier = "Tier 1"
-        elif data['score_overall'] == 390:
+        elif total_marks == 390:
             tier = "Tier 2"
 
         new_mock = Mock(
             name=data['name'],
+            total_marks=total_marks, # <-- SAVE THE NEW FIELD
             score_overall=data['score_overall'],
             percentile_overall=data['percentile_overall'],
             date_taken=data['date_taken'],
-            tier=tier
+            tier=tier # <-- Save the correctly determined tier
         )
         db.session.add(new_mock)
         db.session.commit()
@@ -315,3 +318,29 @@ def get_today_api_calls():
     today = date.today()
     counter = ApiCallCounter.query.filter_by(date=today).first()
     return jsonify({"count": counter.count if counter else 0})
+
+@api_blueprint.route("/mocks/backfill-tiers", methods=['POST'])
+def backfill_mock_tiers():
+    """
+    Updates the tier for mocks that have total_marks populated
+    but do not have a tier assigned yet.
+    """
+    # Find mocks where the tier has not been set
+    mocks_to_update = Mock.query.filter(Mock.tier.is_(None)).all()
+    
+    updated_count = 0
+    for mock in mocks_to_update:
+        # 👇 This logic now correctly uses the total_marks field
+        if mock.total_marks == 200:
+            mock.tier = "Tier 1"
+            updated_count += 1
+        elif mock.total_marks == 390:
+            mock.tier = "Tier 2"
+            updated_count += 1
+    
+    if updated_count > 0:
+        db.session.commit()
+        
+    return jsonify({
+        "message": f"Successfully updated tiers for {updated_count} mocks."
+    }), 200

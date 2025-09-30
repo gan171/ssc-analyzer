@@ -111,6 +111,53 @@ const DashboardPage = () => {
     return <div className="text-center p-12 text-red-500">Error: {error}</div>;
   }
 
+  const handleNameUpdate = async () => {
+    if (!editingMockId) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/mocks/${editingMockId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newMockName }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update mock name');
+      }
+
+      setEditingMockId(null); // Exit editing mode
+      fetchMocks(); // Refresh the list of mocks with the new name
+      
+    } catch (err) {
+      console.error(err);
+      // Optionally, show an error message to the user
+    }
+  };
+
+  const handleBackfillTiers = async () => {
+  if (!window.confirm("This will update tiers for all existing mocks. This is a one-time action. Continue?")) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/mocks/backfill-tiers`, {
+      method: 'POST',
+    });
+    
+    if (!res.ok) {
+      throw new Error('Failed to backfill tiers');
+    }
+    
+    const result = await res.json();
+    alert(result.message); // Show a success message
+    fetchMocks(); // Refresh the dashboard to show the new tiers
+    
+  } catch (err) {
+    console.error(err);
+    alert('An error occurred while updating tiers.');
+  }
+};
+
   // --- NEW USER VIEW ---
   if (mocks.length === 0) {
     return (
@@ -146,34 +193,84 @@ const DashboardPage = () => {
       <h2 className="text-2xl font-semibold text-white mb-4">{title}</h2>
       {mockList.length > 0 ? (
         <div className="space-y-4">
-          {mockList.map((mock) => (
-            <Link href={`/mock/${mock.id}`} key={mock.id} className="block group">
-              <div className="grid grid-cols-12 items-center gap-4 bg-gray-700/50 p-4 rounded-lg group-hover:bg-gray-700/80 transition-all">
-                <div className="col-span-6">
-                  <p className="font-bold text-white truncate">{mock.name}</p>
-                  <p className="text-sm text-gray-400">{new Date(mock.date_taken).toLocaleDateString()}
-                  {mock.tier && <span className="ml-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs">{mock.tier}</span>}
-                  </p>
-                </div>
-                <div className="col-span-2 text-center">
-                  <p className="text-sm text-gray-400">Score</p>
-                  <p className="font-semibold text-green-400">{mock.score_overall}</p>
-                </div>
-                <div className="col-span-2 text-center">
-                  <p className="text-sm text-gray-400">Percentile</p>
-                  <p className="font-semibold text-blue-400">{mock.percentile_overall}%</p>
-                </div>
-                <div className="col-span-2 text-right">
-                    <button
-                      onClick={(e) => handleDeleteMock(mock.id, e)}
-                      className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+          {mockList.map((mock) => {
+          const mockContent = (
+            <div className="grid grid-cols-12 items-center gap-4 bg-gray-700/50 p-4 rounded-lg group-hover:bg-gray-700/80 transition-all">
+              <div className="col-span-6">
+                {editingMockId === mock.id ? (
+                  // --- STATE: EDITING (No Link) ---
+                  <div className="flex items-center gap-2 w-full">
+                    <input
+                      type="text"
+                      value={newMockName}
+                      onChange={(e) => setNewMockName(e.target.value)}
+                      className="bg-gray-900 text-white border border-gray-600 rounded px-2 py-1 w-full"
+                      autoFocus
+                    />
+                    <button 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleNameUpdate(); }} 
+                      className="text-xs bg-green-600 hover:bg-green-700 text-white font-bold p-2 rounded flex-shrink-0"
                     >
-                      Delete
-                  </button>
-                </div>
+                      Save
+                    </button>
+                    <button 
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingMockId(null); }} 
+                      className="text-xs bg-gray-600 hover:bg-gray-700 text-white font-bold p-2 rounded flex-shrink-0"
+                    >
+                      X
+                    </button>
+                  </div>
+                ) : (
+                  // --- STATE: DEFAULT ---
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-white truncate">{mock.name}</p>
+                    <button 
+                      onClick={(e) => { 
+                        e.preventDefault(); 
+                        e.stopPropagation(); 
+                        setEditingMockId(mock.id);
+                        setNewMockName(mock.name);
+                      }} 
+                      className="text-xs p-1 rounded-full hover:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ✏️
+                    </button>
+                  </div>
+                )}
+                <p className="text-sm text-gray-400 mt-1">
+                  {new Date(mock.date_taken).toLocaleDateString()}
+                  {mock.tier && <span className="ml-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs">{mock.tier}</span>}
+                </p>
               </div>
+              <div className="col-span-2 text-center">
+                <p className="text-sm text-gray-400">Score</p>
+                <p className="font-semibold text-green-400">{mock.score_overall}</p>
+              </div>
+              <div className="col-span-2 text-center">
+                <p className="text-sm text-gray-400">Percentile</p>
+                <p className="font-semibold text-blue-400">{mock.percentile_overall}%</p>
+              </div>
+              <div className="col-span-2 text-right">
+                <button
+                  onClick={(e) => handleDeleteMock(mock.id, e)}
+                  className="text-xs bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          );
+
+          return editingMockId === mock.id ? (
+            <div key={mock.id} className="block group">
+              {mockContent}
+            </div>
+          ) : (
+            <Link href={`/mock/${mock.id}`} key={mock.id} className="block group">
+              {mockContent}
             </Link>
-          ))}
+          );
+        })}
         </div>
       ) : (
         <p className="text-gray-400">No mocks found in this category.</p>
@@ -200,6 +297,13 @@ const DashboardPage = () => {
           </button>
           <button onClick={() => setShowModal('import')} className="flex items-center bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
             <GlobeIcon /> Import
+          </button>
+          {/* Add the new button here */}
+          <button 
+            onClick={handleBackfillTiers} 
+            className="flex items-center bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+          >
+            Update Old Tiers
           </button>
         </div>
       </div>

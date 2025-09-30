@@ -56,7 +56,13 @@ def scrape_testbook_data(cookies, url):
             overall_percentile = float(re.search(r"(\d+\.?\d*)", percentile_text).group(1))
 
             # Create Mock and Sections in DB
-            new_mock = Mock(name=mock_name, score_overall=overall_score, percentile_overall=overall_percentile)
+            tier = None
+            score = int(overall_score)
+            if score == 200:
+                tier = "Tier 1"
+            elif score == 390:
+                tier = "Tier 2"
+            new_mock = Mock(name=mock_name, score_overall=overall_score, percentile_overall=overall_percentile,tier=tier)
             db.session.add(new_mock)
             db.session.flush()
             new_mock_id = new_mock.id
