@@ -1,10 +1,10 @@
-# Use a more stable Debian "buster" image as the base
-FROM python:3.9-buster
+# Use a specific version of the official Python runtime as a parent image
+FROM python:3.11.9-slim-bookworm
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies for pytesseract and selenium
+# Update the package list and install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     libglib2.0-0 \
@@ -25,5 +25,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application's code into the container
 COPY . .
 
-# Command to run the application
-CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:10000"]
+# Make port 10000 available to the world outside this container
+EXPOSE 10000
+
+# Run the app using Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:10000", "run:app"]
