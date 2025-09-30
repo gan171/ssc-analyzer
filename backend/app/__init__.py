@@ -6,6 +6,7 @@ from .api.analytics_routes import analytics_blueprint
 from flask_migrate import Migrate
 from flask_cors import CORS 
 from .api.practice_routes import practice_routes
+from .api.health_check_routes import health_check_bp
 
 
 def create_app(config_class='config.Config'):
@@ -28,6 +29,7 @@ def create_app(config_class='config.Config'):
     app.register_blueprint(api_blueprint, url_prefix='/api')
     app.register_blueprint(analytics_blueprint, url_prefix='/api')
     app.register_blueprint(practice_routes, url_prefix='/api')
+    app.register_blueprint(health_check_bp, url_prefix='/api')
 
 
     return app

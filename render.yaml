@@ -14,7 +14,7 @@ services:
     rootDir: backend
     pullRequestPreviewsEnabled: true
     plan: free
-    healthCheckPath: /api/mocks
+    healthCheckPath: /api/health
     envVars:
       - key: postgresql://ssc_analyzer_db1_user:4wXhjcsSaN5DulMUZ1hornqL6jMIyHph@dpg-d3e192ndiees73fpcc2g-a/ssc_analyzer_db1
         fromDatabase:
