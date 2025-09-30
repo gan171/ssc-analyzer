@@ -1,5 +1,5 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim
+# Use a more stable Debian "buster" image as the base
+FROM python:3.9-buster
 
 # Set the working directory in the container
 WORKDIR /app
