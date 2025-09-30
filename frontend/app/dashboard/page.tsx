@@ -49,7 +49,7 @@ const DashboardPage = () => {
       const data = await res.json();
       setMocks(data);
     } catch (err: any) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setIsLoading(false);
     }
