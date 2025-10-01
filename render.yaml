@@ -28,5 +28,4 @@ services:
         value: run.py   
       - key: FLASK_DEBUG
         value: 0 
-    preDeployCommand:
-      - flask db upgrade
+  
