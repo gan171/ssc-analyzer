@@ -344,3 +344,30 @@ def backfill_mock_tiers():
     return jsonify({
         "message": f"Successfully updated tiers for {updated_count} mocks."
     }), 200
+
+@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'PUT', 'DELETE'])
+def handle_mock(mock_id):
+    mock = Mock.query.get_or_404(mock_id)
+    if request.method == 'GET':
+        return jsonify(mock.to_dict())
+    
+    if request.method == 'PUT':
+        data = request.get_json()
+        mock.name = data.get('name', mock.name)
+        db.session.commit()
+        return jsonify(mock.to_dict())
+
+    if request.method == 'DELETE':
+        try:
+            # Delete associated mistake images first
+            for mistake in mock.mistakes:
+                full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+                if os.path.exists(full_image_path):
+                    os.remove(full_image_path)
+            
+            db.session.delete(mock)
+            db.session.commit()
+            return jsonify({"message": "Mock and all associated data deleted successfully"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": "Failed to delete mock", "message": str(e)}), 500
