@@ -1,5 +1,6 @@
 from app.extensions import db
 from sqlalchemy.dialects.postgresql import JSON
+import datetime
 
 class Mistake(db.Model):
     __tablename__ = 'mistakes'
@@ -11,11 +12,24 @@ class Mistake(db.Model):
     question_type = db.Column(db.String(50), nullable=False) # incorrect or unattempted
     mock_id = db.Column(db.Integer, db.ForeignKey('mocks.id'), nullable=False)
     notes = db.Column(db.Text, nullable=True)
+    
+    # Fields for detailed question data
     question_text = db.Column(db.Text, nullable=True)
     options = db.Column(JSON, nullable=True)
-    correct_option = db.Column(db.String(1), nullable=True)
+    
+    # --- MODIFIED/NEW FIELDS ---
+    # To store the full text of the user's selected answer, e.g., "A. Option Text"
+    user_answer = db.Column(db.Text, nullable=True) 
+    # Renamed and changed to Text to store the full correct answer text
+    correct_answer = db.Column(db.Text, nullable=True) 
+    # --- END OF CHANGES ---
+
     difficulty = db.Column(db.String(50), nullable=True, default='unseen')
-    tier = db.Column(db.String(50)) 
+    tier = db.Column(db.String(50))
+    is_recalled = db.Column(db.Boolean, default=False)
+    is_practiced = db.Column(db.Boolean, default=False)
+    last_practiced_date = db.Column(db.DateTime, nullable=True)
+
 
     def __repr__(self):
         return f'<Mistake {self.id} for Mock {self.mock_id}>'
@@ -33,7 +47,11 @@ class Mistake(db.Model):
             'notes': self.notes,
             'question_text': self.question_text,
             'options': self.options,
-            'correct_option': self.correct_option,
+            'user_answer': self.user_answer,
+            'correct_answer': self.correct_answer,
             'difficulty': self.difficulty,
-            'tier': self.tier
+            'tier': self.tier,
+            'is_recalled': self.is_recalled,
+            'is_practiced': self.is_practiced,
+            'last_practiced_date': self.last_practiced_date.isoformat() if self.last_practiced_date else None
         }

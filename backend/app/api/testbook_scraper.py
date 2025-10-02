@@ -193,12 +193,46 @@ def scrape_testbook_data(cookies, url):
                     print(f"Details: Q{i}, Status: {status}, Section: {section_name}, Time: {time_spent_seconds}s")
 
                     if status in ['Incorrect', 'Unattempted', 'Wrong', 'Skipped']:
+                        # --- NEW EXTRACTION LOGIC STARTS HERE ---
+                        options_data = {}
+                        user_answer_text = None
+                        correct_answer_text = None
+
+                        options_list = soup_question.select('ul.quiz-options-list li.quiz-options-list-item')
+                        
+                        for option_li in options_list:
+                            option_label_tag = option_li.select_one('.option-label')
+                            option_text_tag = option_li.select_one('.option-text')
+
+                            if option_label_tag and option_text_tag:
+                                option_label = option_label_tag.text.strip()
+                                option_text = option_text_tag.text.strip()
+                                full_option_text = f"{option_label} {option_text}"
+                                
+                                options_data[option_label.replace('.', '')] = option_text
+                                
+                                if 'js-correct-answer' in option_li.get('class', []):
+                                    correct_answer_text = full_option_text
+                                
+                                if 'state-attempted' in option_li.get('class', []):
+                                    user_answer_text = full_option_text
+                        # --- NEW EXTRACTION LOGIC ENDS HERE ---
                         filename = f"mistake_{new_mock_id}_{i}_{uuid.uuid4()}.png"
                         filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
                         question_panel.screenshot(filepath)
+                        mistake_status = 'Incorrect' if status in ['Incorrect', 'Wrong'] else 'Unattempted'
                         
-                        mistake_status = status if status not in ['Wrong', 'Skipped'] else ('Incorrect' if status == 'Wrong' else 'Unattempted')
-                        new_mistake = Mistake(mock_id=new_mock_id, image_path=filename, section_name=section_name, question_type=mistake_status)
+                        new_mistake = Mistake(
+                            mock_id=new_mock_id, 
+                            image_path=filename, 
+                            section_name=section_name, 
+                            question_type=mistake_status,
+                            question_text=current_question_text,
+                            options=options_data,
+                            user_answer=user_answer_text,
+                            correct_answer=correct_answer_text,
+                            tier=tier
+                        )
                         db.session.add(new_mistake)
                         db.session.commit()
 

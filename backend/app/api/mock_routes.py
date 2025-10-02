@@ -119,18 +119,6 @@ def handle_mocks():
 
         return jsonify({"id": new_mock.id, "message": "Mock created successfully!"}), 201
 
-@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'PUT'])
-def get_mock_details(mock_id):
-    mock = Mock.query.get_or_404(mock_id)
-    if request.method == 'GET':
-        return jsonify(mock.to_dict())
-    
-    if request.method == 'PUT':
-        data = request.get_json()
-        mock.name = data.get('name', mock.name)
-        db.session.commit()
-        return jsonify(mock.to_dict())
-
 
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])
 @cross_origin()
