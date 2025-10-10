@@ -10,10 +10,10 @@ practice_routes = Blueprint('practice_routes', __name__)
 @practice_routes.route('/practice/quiz', methods=['GET'])
 def get_quiz():
     section_name = request.args.get('section_name')
-    if not section_name:
-        return jsonify({"error": "section_name parameter is required"}), 400
-
-    mistakes = Mistake.query.filter_by(section_name=section_name).all()
+    if section_name:
+        mistakes = Mistake.query.filter_by(section_name=section_name).all()
+    else:
+        mistakes = Mistake.query.all()
     return jsonify([m.to_dict() for m in mistakes])
 
 @practice_routes.route('/practice/submit', methods=['POST'])

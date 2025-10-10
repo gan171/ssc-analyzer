@@ -18,6 +18,7 @@ from datetime import date
 from app.models.api_call_counter import ApiCallCounter
 from app.api.helpers import increment_api_call_counter
 import re
+from sqlalchemy.orm import joinedload
 
 api_blueprint = Blueprint('api', __name__)
 
@@ -74,50 +75,35 @@ def health_check():
     return jsonify({"status": "ok", "message": "Backend is running!"})
 
 # --- MOCK ROUTES ---
-@api_blueprint.route("/mocks", methods=['GET', 'POST'])
-def handle_mocks():
+@api_blueprint.route("/mocks/<int:mock_id>", methods=['GET', 'PUT', 'DELETE'])
+def handle_mock(mock_id):
+    # Use joinedload to fetch mistakes and sections in the same query. This is the main performance fix.
+    mock = Mock.query.options(joinedload(Mock.mistakes), joinedload(Mock.sections)).get_or_404(mock_id)
+
     if request.method == 'GET':
-        all_mocks = Mock.query.order_by(Mock.date_taken.desc()).all()
-        result = [mock.to_dict() for mock in all_mocks]
-        return jsonify(result), 200
+        # mock.to_dict() will now include the loaded mistakes and sections automatically
+        return jsonify(mock.to_dict())
 
-    if request.method == 'POST':
+    if request.method == 'PUT':
         data = request.get_json()
-        
-        # 👇 NEW: Determine tier based on total_marks
-        tier = None
-        total_marks = data.get('total_marks', 0) # Get total_marks from request
-        if total_marks == 200:
-            tier = "Tier 1"
-        elif total_marks == 390:
-            tier = "Tier 2"
-
-        new_mock = Mock(
-            name=data['name'],
-            total_marks=total_marks, # <-- SAVE THE NEW FIELD
-            score_overall=data['score_overall'],
-            percentile_overall=data['percentile_overall'],
-            date_taken=data['date_taken'],
-            tier=tier # <-- Save the correctly determined tier
-        )
-        db.session.add(new_mock)
+        mock.name = data.get('name', mock.name)
         db.session.commit()
+        return jsonify(mock.to_dict())
 
-        for section_data in data.get('sections', []):
-            new_section = Section(
-                mock_id=new_mock.id,
-                name=section_data['name'],
-                score=section_data['score'],
-                correct_count=section_data['correct_count'],
-                incorrect_count=section_data['incorrect_count'],
-                unattempted_count=section_data['unattempted_count'],
-                time_taken_seconds=section_data['time_taken_seconds']
-            )
-            db.session.add(new_section)
-        
-        db.session.commit()
+    if request.method == 'DELETE':
+        try:
+            # Delete associated mistake images first
+            for mistake in mock.mistakes:
+                full_image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], mistake.image_path)
+                if os.path.exists(full_image_path):
+                    os.remove(full_image_path)
 
-        return jsonify({"id": new_mock.id, "message": "Mock created successfully!"}), 201
+            db.session.delete(mock)
+            db.session.commit()
+            return jsonify({"message": "Mock and all associated data deleted successfully"}), 200
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": "Failed to delete mock", "message": str(e)}), 500
 
 
 @api_blueprint.route("/mocks/<int:mock_id>/mistakes", methods=['GET', 'POST'])

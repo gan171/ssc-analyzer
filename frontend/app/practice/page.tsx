@@ -1,95 +1,122 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, ArrowRight, Lightbulb, Sparkles } from 'lucide-react';
-import Image from 'next/image';
+import { Lightbulb, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
-// Updated Mistake type to include all the new fields from your database
+const clean_text = (text: string | null): string => {
+    if (!text) {
+        return '';
+    }
+    return text.replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+};
+
 interface Mistake {
     id: number;
     mock_id: number;
     image_path: string;
-    topic: string | null;
-    notes: string | null;
     section_name: string;
     question_type: string;
-    question_text: string | null;
-    options: Record<string, string> | null;
-    user_answer: string | null; // The original wrong answer from the mock
+    question_text: string;
+    options: { [key: string]: string };
+    user_answer: string | null;
     correct_answer: string | null;
-    difficulty: string;
     tier: string;
 }
 
 const PracticePage = () => {
     const [mistakes, setMistakes] = useState<Mistake[]>([]);
+    const [sections, setSections] = useState<string[]>([]);
+    const [selectedSection, setSelectedSection] = useState<string>('');
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const fetchMistakes = async () => {
+        const fetchSections = async () => {
             try {
-                setIsLoading(true);
-                const response = await fetch('/api/mistakes');
-                if (!response.ok) {
-                    throw new Error('Failed to fetch mistakes');
+                const res = await fetch('/api/practice/sections');
+                const data = await res.json();
+                setSections(data.sections || []);
+                if (data.sections && data.sections.length > 0) {
+                    setSelectedSection(data.sections[0]);
                 }
-                const data = await response.json();
-                // Filter for mistakes that have the new text data
-                const practiceableMistakes = data.filter((m: Mistake) => m.question_text && m.options);
-                if (practiceableMistakes.length === 0) {
-                    setError("No practiceable mistakes found. Please import a mock with the new scraper version.");
-                } else {
-                    setMistakes(practiceableMistakes);
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'An unknown error occurred');
-            } finally {
-                setIsLoading(false);
+            } catch (error) {
+                console.error('Failed to fetch sections:', error);
             }
         };
-
-        fetchMistakes();
+        fetchSections();
     }, []);
 
-    const goToNext = () => {
+    useEffect(() => {
+        if (selectedSection) {
+            const fetchMistakes = async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`/api/practice/quiz?section=${selectedSection}`);
+                    const data = await res.json();
+                    setMistakes(data || []);
+                    setCurrentIndex(0);
+                } catch (error) {
+                    console.error('Failed to fetch mistakes:', error);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            fetchMistakes();
+        }
+    }, [selectedSection]);
+
+    const handleNext = () => {
         setCurrentIndex((prev) => (prev + 1) % mistakes.length);
     };
 
-    const goToPrevious = () => {
+    const handlePrevious = () => {
         setCurrentIndex((prev) => (prev - 1 + mistakes.length) % mistakes.length);
     };
 
-    if (isLoading) {
-        return <div className="flex justify-center items-center h-screen">Loading practice session...</div>;
-    }
-
-    if (error) {
-        return <div className="flex justify-center items-center h-screen text-red-500">{error}</div>;
-    }
-
-    if (mistakes.length === 0) {
-        return <div className="flex justify-center items-center h-screen">No mistakes available to practice.</div>;
-    }
-
     return (
         <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-bold mb-4">Practice Mode ({currentIndex + 1} / {mistakes.length})</h1>
-            <PracticeView mistake={mistakes[currentIndex]} />
-            <div className="flex justify-between mt-4">
-                <Button onClick={goToPrevious} disabled={mistakes.length <= 1}>
-                    <ArrowLeft className="mr-2 h-4 w-4" /> Previous
-                </Button>
-                <Button onClick={goToNext} disabled={mistakes.length <= 1}>
-                    Next <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold">Practice Mode</h1>
+                {sections.length > 0 && (
+                     <Select onValueChange={setSelectedSection} defaultValue={selectedSection}>
+                        <SelectTrigger className="w-[180px]">
+                            <SelectValue placeholder="Select a section" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {sections.map(section => (
+                                <SelectItem key={section} value={section}>{section}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                )}
             </div>
+
+            {loading ? (
+                <p>Loading questions...</p>
+            ) : mistakes.length > 0 ? (
+                <>
+                    <PracticeView mistake={mistakes[currentIndex]} />
+                    <div className="flex justify-between mt-4">
+                        <Button onClick={handlePrevious}><ChevronLeft className="mr-2 h-4 w-4" /> Previous</Button>
+                        <span className="self-center">{currentIndex + 1} / {mistakes.length}</span>
+                        <Button onClick={handleNext}>Next <ChevronRight className="ml-2 h-4 w-4" /></Button>
+                    </div>
+                </>
+            ) : (
+                <p>No mistakes found for this section. Well done!</p>
+            )}
         </div>
     );
 };
@@ -98,7 +125,6 @@ const PracticeView = ({ mistake }: { mistake: Mistake }) => {
     const [selectedOption, setSelectedOption] = useState<string | null>(null);
     const [isAnswered, setIsAnswered] = useState(false);
 
-    // Reset state when the mistake (question) changes
     useEffect(() => {
         setSelectedOption(null);
         setIsAnswered(false);
@@ -109,14 +135,24 @@ const PracticeView = ({ mistake }: { mistake: Mistake }) => {
             setIsAnswered(true);
         }
     };
-    
-    // Helper to get just the label (e.g., "A") from the full answer text
+
     const getOptionLabel = (fullAnswer: string | null) => {
         if (!fullAnswer) return '';
         return fullAnswer.split('.')[0] || '';
     };
 
     const correctOptionLabel = getOptionLabel(mistake.correct_answer);
+
+    const getOptionStyle = (key: string) => {
+        if (!isAnswered) return '';
+        if (key === correctOptionLabel) {
+            return 'border-green-500 bg-green-100 dark:bg-green-900';
+        }
+        if (key === selectedOption && key !== correctOptionLabel) {
+            return 'border-red-500 bg-red-100 dark:bg-red-900';
+        }
+        return '';
+    };
 
     return (
         <Card>
@@ -131,38 +167,31 @@ const PracticeView = ({ mistake }: { mistake: Mistake }) => {
                     </TabsList>
                     <TabsContent value="interactive" className="mt-4">
                         <div className="mb-6">
-                            <p className="whitespace-pre-wrap">{mistake.question_text}</p>
+                            <p className="whitespace-pre-wrap">{clean_text(mistake.question_text)}</p>
                         </div>
                         
                         <RadioGroup onValueChange={setSelectedOption} value={selectedOption || ''} disabled={isAnswered}>
-                            {mistake.options && Object.entries(mistake.options).map(([key, value]) => {
-                                let optionStyle = "";
-                                if (isAnswered) {
-                                    if (key === correctOptionLabel) {
-                                        optionStyle = "bg-green-100 border-green-500 text-green-800";
-                                    } else if (key === selectedOption) {
-                                        optionStyle = "bg-red-100 border-red-500 text-red-800";
-                                    }
-                                }
+                            {mistake.options && Object.entries(mistake.options)
+                                // 👇 THIS IS THE CHANGE: Only include options with keys A, B, C, or D
+                                .filter(([key]) => ['A', 'B', 'C', 'D'].includes(key))
+                                .map(([key, value]) => {
+                                const optionStyle = getOptionStyle(key);
                                 
                                 return (
                                     <div key={key} className={`flex items-center space-x-2 p-3 border rounded-md mb-2 ${optionStyle}`}>
                                         <RadioGroupItem value={key} id={key} />
-                                        <Label htmlFor={key} className="flex-1">{`${key}. ${value}`}</Label>
+                                        <Label htmlFor={key} className="flex-1">{`${key}. ${clean_text(value)}`}</Label>
                                     </div>
                                 );
                             })}
                         </RadioGroup>
                     </TabsContent>
                     <TabsContent value="screenshot" className="mt-4">
-                        <div className="relative w-full h-96">
-                            <Image
-                                src={`/uploads/${mistake.image_path}`}
-                                alt={`Mistake screenshot for question ${mistake.id}`}
-                                layout="fill"
-                                objectFit="contain"
-                            />
-                        </div>
+                        <img 
+                            src={`/api/mistakes/image/${mistake.image_path}`} 
+                            alt={`Screenshot for mistake ${mistake.id}`} 
+                            className="max-w-full h-auto rounded-lg border"
+                        />
                     </TabsContent>
                 </Tabs>
             </CardContent>
@@ -172,11 +201,11 @@ const PracticeView = ({ mistake }: { mistake: Mistake }) => {
                 ) : (
                     <>
                         {selectedOption === correctOptionLabel ? (
-                            <Alert variant="default" className="bg-green-50 border-green-200">
-                                <Sparkles className="h-4 w-4 text-green-600" />
-                                <AlertTitle className="text-green-800">Correct!</AlertTitle>
-                                <AlertDescription className="text-green-700">
-                                    Great job! You corrected your mistake.
+                            <Alert>
+                                <Lightbulb className="h-4 w-4" />
+                                <AlertTitle>Correct!</AlertTitle>
+                                <AlertDescription>
+                                    Well done! You selected the correct answer.
                                 </AlertDescription>
                             </Alert>
                         ) : (
@@ -184,8 +213,8 @@ const PracticeView = ({ mistake }: { mistake: Mistake }) => {
                                 <Lightbulb className="h-4 w-4" />
                                 <AlertTitle>Not quite!</AlertTitle>
                                 <AlertDescription>
-                                    <div>The correct answer is: <strong>{mistake.correct_answer}</strong></div>
-                                    {mistake.user_answer && <div>Your original answer was: <strong>{mistake.user_answer}</strong></div>}
+                                    <div>The correct answer is: <strong>{clean_text(mistake.correct_answer)}</strong></div>
+                                    {mistake.user_answer && <div>Your original answer was: <strong>{clean_text(mistake.user_answer)}</strong></div>}
                                 </AlertDescription>
                             </Alert>
                         )}
